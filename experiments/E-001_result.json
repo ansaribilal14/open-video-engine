@@ -1,0 +1,80 @@
+[
+  {
+    "flags": "--headless=new --no-sandbox --enable-unsafe-webgpu --use-vulkan --use-vulkan-swiftshader --enable-features=Vulkan",
+    "ok": false,
+    "result": {
+      "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+      "gpu": {
+        "info": {}
+      },
+      "matrix": {
+        "decode": {
+          "avc1.42E01E": true,
+          "avc1.640028": true,
+          "vp09.00.10.08": true,
+          "av01.0.04M.08": true,
+          "hvc1.1.6.L93.B0": false
+        },
+        "encode": {
+          "avc1.42E01E": true,
+          "avc1.640028": true,
+          "vp09.00.10.08": true,
+          "av01.0.04M.08": true,
+          "hvc1.1.6.L93.B0": false
+        }
+      },
+      "decode": {
+        "decodedFrames": 48
+      },
+      "gpurender": {
+        "error": "A valid external Instance reference no longer exists.",
+        "lost": "destroyed",
+        "copyAlsoFailed": true
+      },
+      "errors": [
+        "import-mode failed: Failed to execute 'importExternalTexture' on 'GPUDevice': Failed to import textu"
+      ],
+      "webcodecs": "present",
+      "secureContext": true
+    }
+  },
+  {
+    "flags": "--headless=new --no-sandbox --enable-unsafe-webgpu",
+    "ok": false,
+    "result": {
+      "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+      "gpu": {
+        "info": {}
+      },
+      "matrix": {
+        "decode": {
+          "avc1.42E01E": true,
+          "avc1.640028": true,
+          "vp09.00.10.08": true,
+          "av01.0.04M.08": true,
+          "hvc1.1.6.L93.B0": false
+        },
+        "encode": {
+          "avc1.42E01E": true,
+          "avc1.640028": true,
+          "vp09.00.10.08": true,
+          "av01.0.04M.08": true,
+          "hvc1.1.6.L93.B0": false
+        }
+      },
+      "decode": {
+        "decodedFrames": 48
+      },
+      "gpurender": {
+        "error": "A valid external Instance reference no longer exists.",
+        "lost": "destroyed",
+        "copyAlsoFailed": true
+      },
+      "errors": [
+        "import-mode failed: Failed to execute 'importExternalTexture' on 'GPUDevice': Failed to import textu"
+      ],
+      "webcodecs": "present",
+      "secureContext": true
+    }
+  }
+]

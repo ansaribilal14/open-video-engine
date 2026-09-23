@@ -1,0 +1,11 @@
+[PASS] P1 seed1: apply == replay: 288 commands; canons match: True
+[PASS] P1 seed2: apply == replay: 294 commands; canons match: True
+[PASS] P1 seed3: apply == replay: 291 commands; canons match: True
+[PASS] P1b JSON round-trip replay deterministic: hashes equal: True
+[PASS] P2 undo-all via inverses is state-consistent: 300 commands undone; 0 clips remain valid
+[PASS] P2b full undo fidelity (hash equality): undo stack depth 200; clips=1
+[PASS] P2c base clip invariant preserved under undo: base clip survives all undo operations
+[PASS] P3 snapshot+suffix == full replay: hash match: True
+[PASS] P5 float-typed command payloads are replay-hostile: 300/300 reconstructed starts diverge under two legal fp policies; rational schema: 0/300 by construction
+VERDICT: command log + snapshot VIABLE as project-format core; float payloads forbidden
+HARDWARE: container CPU (schema/determinism focus; perf not measured)

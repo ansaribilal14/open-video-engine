@@ -1,0 +1,6 @@
+[PASS] source built with predictable GOP: frames=144, keyframes=6 at [0.0, 1.0, 2.0, 3.0]...
+[PASS] copy cut at keyframes is frame-exact: expected 72 frames, got 72, 123 ms
+[PASS] mid-GOP copy cut snaps to previous keyframe (imprecision CONFIRMED): requested 1.5s, output first pts 0.0s, frames 48 vs requested 48
+[PASS] re-encode cut is frame-exact: expected 48, got 48, 89 ms
+[FAIL] copy is faster than re-encode: copy 123ms vs re-encode 89ms
+VERDICT: see summary

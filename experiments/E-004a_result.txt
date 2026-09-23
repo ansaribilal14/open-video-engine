@@ -1,0 +1,6 @@
+[PASS] handle + exact rational end: got 192197005/120000, expected 38439401/24000
+[PASS] free completes: opaque handle dropped in Rust
+[PASS] null handle -> sentinel: num=-1
+[PASS] zero-den rejected (null): ptr=None
+[PASS] panic contained (process alive, code 3): op0=0, op1=3
+VERDICT: FFI boundary pattern viable: exact i64 time + opaque handles + error codes + catch_unwind

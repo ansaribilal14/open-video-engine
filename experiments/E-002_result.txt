@@ -1,0 +1,15 @@
+[PASS] T1 fp 10x(0.1) != 1.0: fp sum = 0.9999999999999999 (mathematically 1.0) -> frame index floor(fp*30)=29 vs exact 30
+[PASS] T1 rational 10x(1/10) == 1.0: Fraction sum = 1
+[PASS] T1 fp frame-index off-by-one at boundary: fp index at 1.0s = 29, rational = 30 -> snap/to-region tests misfire
+[PASS] T2 decimal-23.976 drift accumulates: after 2h (172627 frames): 7.200 ms drift vs exact 24000/1001
+[PASS] T2 1/23.976 != 1001/24000 in fp: 1/23.976=0.04170837504170838  1001/24000=0.04170833333333333
+[PASS] T3 fp start-times order-dependent: 2000/2000 clip starts differ between L→R and R→L accumulation
+[PASS] T3 rational sums order-invariant: totals equal: True (total = 5143199/1200)
+[PASS] T4 48kHz×29.97 frame = non-integer samples: 8008/5 samples/frame -> sample boundary must be RULED, not fp-multiplied
+[PASS] T4 fp sample-boundary mismatches found: 178 boundary mismatches across 6 rate pairs × 20000 frames (first: (48000, 30000, 1001, 89))
+[PASS] T5 two legal fp policies disagree: 1753/2000 starts differ between accumulation policies (naive vs prefix-sum)
+[PASS] T6 192kHz ticks handle 23.976 but NOT 29.97: 1 frame: 23.976->8008 ticks (integral), 29.97->32032/5 ticks (non-integral)
+[PASS] T6 no practical fixed tick axis covers arbitrary rates: even at 30030000 Hz ticks, 17000/999 fps frames = 170170000000/333 ticks (non-integral) => per-clip rationals remain necessary
+[PASS] T7 benchmark executed (perf non-authoritative): N=20000: rational build 46.7ms, fp build 11.4ms, sort-by-start 11.7ms — Python timing only; re-run in Rust crate ove-time
+VERDICT: fp seconds UNSAFE as authoritative time (hypothesis confirmed)
+HARDWARE: container CPU (irrelevant for correctness; perf rows non-representative)
