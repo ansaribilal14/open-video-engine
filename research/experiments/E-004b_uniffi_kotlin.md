@@ -33,6 +33,11 @@
     R5 tick-axis rescale exact (4800 ticks @24000/1001 → 9,619,200 ticks @48kHz);
     R6 FreeRational variant agrees; R7 API surface contains **no** Double/Float
     parameters (verified by reflection) — the fp ban is structural, not conventional.
+- **TRAP (from a second implementation pass, reconciled 2026-09-24)**: in uniffi 0.29
+  proc-macro mode, exported functions MUST be `pub` — non-pub `#[uniffi::export]` fns
+  compile cleanly but emit NO FUNC metadata (bindings generate without the functions,
+  silently). Also: `#[uniffi::method]` attaches only to Arc objects; value records get
+  namespace functions. Error enums in exported Results need Display/Error impls.
 - **LIMITATIONS**: desktop JVM/JNA leg, not Android ART/JNI (E-004c: thread attach,
   exception translation, callback marshalling on-device remain open); perf not
   measured (debug cdylib); async/objects/callbacks surface untested (time-only API).

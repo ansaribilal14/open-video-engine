@@ -44,3 +44,25 @@
   lazily-rebuilt ordered index for random access — recorded as ADR-011 (PROPOSED).
   Vec rejected definitively; piece table noted as the stable-identity/undo alternative;
   BTreeMap reserved for derived indexes, not the primary store. Feed into Phase 2.
+
+## ADDENDUM — second independent implementation (E-002c2, 2026-09-23)
+
+A separately-written 5-structure bench (`scripts/experiments/E-002c2_avl_random.rs`,
+output `experiments/E-002c2_result.txt`; session reconciled post-hoc after an
+environment reset produced a duplicate implementation) ran the same question with
+RANDOM split/resize/move positions and a 5th candidate: an **augmented order-statistic
+AVL tree** (subtree count + subtree duration sum, implicit order key), all candidate
+outputs cross-validated by start-prefix hash + total + count:
+
+- Under uniform-random edit positions the AVL wins every verb: split 2.1 ms,
+  resize 0.4 ms, move 0.9 ms (20k clips) — i.e., the "derived lazily-rebuilt ordered
+  index" from the decision above can be this tree, giving O(log n) point/rank queries
+  without the O(n) index rebuild after every cursor edit.
+- Absolute-start family (time-keyed `BTreeMap<start, _>`) again disqualifies, with a
+  concrete correctness bug found by the bench itself: single-pass
+  `remove(k); insert(k+delta)` rekeying **silently overwrites a colliding key**
+  (lost 17 clips before the panic) — two-phase rekey is mandatory. Independent
+  confirmation of the derived-starts rule.
+- Reconciles with the main result: gap buffer still owns cursor-local editing
+  (W1/W3); the AVL is the strongest known shape for the derived index and for
+  workloads with no cursor locality (script/agent-driven batch edits, E-009 surface).

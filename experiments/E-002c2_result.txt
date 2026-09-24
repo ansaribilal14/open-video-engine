@@ -1,0 +1,16 @@
+ops: N=20000 splits=5000 resizes=2000 moves=2000 lookups=2000 (RANDOM positions, shared script)
+final_total=2468306384 ticks (102846.099 s)
+
+CROSS-VALIDATION: all 5 structures identical (hash/total/count)  OK
+
+structure          build     split    resize      move      walk    lookup   B/clip
+------------------------------------------------------------------------------------
+A Vec<Clip>         0.2ms     23.2ms     10.3ms     26.1ms     0.01ms     0.05ms       24
+B GapBuffer         0.4ms     18.7ms     15.2ms     32.4ms     0.01ms     0.18ms       48
+C BTreeMap          1.2ms     99.8ms   2547.1ms   3187.8ms     0.04ms     0.15ms       64
+D PieceTable        0.0ms      7.5ms      0.0ms      5.7ms     0.09ms    69.05ms       24
+E AugAVL            1.8ms      2.1ms      0.4ms      0.9ms     0.21ms     0.24ms       56
+
+all values ms, single run, container CPU — indicative relative order only
+NOTE: E-002b's split=45.6ms used front-clustered split positions (step_by(4)); this run
+uses RANDOM positions — the honest worst case for absolute-start families.

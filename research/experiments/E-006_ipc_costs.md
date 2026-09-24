@@ -37,7 +37,9 @@
   handling and webkit2gtk task IPC (not runnable in this container: no webkit2gtk/
   display) — numbers are lower bounds and RELATIVE comparators, absolute Tauri
   overhead unmeasured (E-006b, blocked). MessageChannel approximates but is not the
-  Tauri channel implementation.
+  Tauri channel implementation. The native-side serialization leg has since been
+  measured in **E-006a** (serde_json/bincode/postcard): both edges pay ~5–27 ms/MB
+  for JSON — the rule holds independently at each end of the transport.
 - **DECISION**: Doc-17's rule is now numerically grounded: **invoke()-style JSON for
   commands ≤ ~10 KB; binary custom-protocol/typed-array path for anything ≥ ~100 KB
   (snapshots, thumbnails, manifest, any frame data)**; never structuredClone deep

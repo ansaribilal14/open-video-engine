@@ -15,6 +15,7 @@
 | E-004a | Rust FFI boundary pattern | [record](../../research/experiments/E-004a_ffi_boundary.md) | E-004a_ffi_boundary.rs + E-004a_driver.py | RUN: 5/5 PASS — exact i64 time + handles + panic containment viable |
 | E-004b | UniFFI Kotlin codegen + runtime for ove-time | [record](../../research/experiments/E-004b_uniffi_kotlin.md) | scripts/experiments/E-004b_uniffi/ | RUN: codegen ✓ (1283-line kt, JNA-only dep); unmodified Kotlin compiles (kotlinc 2.1.20); LIVE JNA roundtrip 8/8 PASS incl. boundary-floor exactness + fp-free-API reflection check → ADR-001 codegen trigger cleared |
 | E-006 | IPC transport costs (browser leg) | [record](../../research/experiments/E-006_ipc_costs.md) | E-006_ipc_browser_leg.cjs | PARTIAL-RUN: JSON invoke fine ≤~10KB (1–24µs); 1.4MB JSON = 42% of frame budget vs binary 0.5% (~89×) → doc-17 rule numerically grounded; structuredClone SLOWER than JSON on object-heavy payloads; real-Tauri leg BLOCKED (webkit2gtk) → E-006b |
+| E-006a | IPC serialization costs, NATIVE side (fills E-006's unmeasured native leg) | [record](../../research/experiments/E-006a_ipc_serialization.md) | E-006a_ipc_serialization.rs (crate E-006a_ipc_crate/) | RUN: serde_json fine for commands (0.33ms/1000) + state (5.4ms/20k clips); frames disqualified (1 MiB RGBA → 3.57× blowup, 1080p60 ≈ 1.6 CPU-s/s); bincode/postcard 10–20× cheaper → binary path mandatory for pixels from BOTH sides |
 | E-007 | Smart-render / stream-copy semantics (real media) | [record](../../research/experiments/E-007_smart_render.md) | E-007_smart_render.py | RUN: keyframe-exact copy cuts 72/72 ✓; mid-GOP copy cut selects WRONG content (1.5s request → 0.0s output) — keyframe index mandatory; timing leg invalid at micro scale → superseded by E-007b |
 | E-007b | Smart-render timing at real resolutions | [record](../../research/experiments/E-007b_real_res_timing.md) | E-007b_real_res_timing.py | RUN: 1080p keyframe-aligned copy 67–69ms duration-exact vs re-encode 458–815ms → 6.8–11.9× speedup; full re-encode 1897ms/10s → segment-copy renderer confirmed |
 | E-009 | Shared command surface: agent + UI edits in ONE log (Q-09) | [record](../../research/experiments/E-009_shared_command_surface.md) | E-009_shared_command_surface.py | RUN: 36/36 PASS — 10 command surfaces (8 payload + batch + undo) wrapped in MCP 2026-07-28 stdio; UI/wire hash-identical at every step; owner-agnostic replay; cross-ownership undo; atomic batches; float payloads rejected at both edges → ADR-010 **ACCEPTED** |
@@ -34,7 +35,7 @@
 | E-013 | Real Claude Code end-to-end over the E-009 MCP server (approval tiers, receipts) | agent runtime in CI |
 
 ## Experiment ID registry (avoid collisions)
-Run: E-001, E-002, E-002b, E-002c, E-003, E-004a, E-004b, E-006, E-007, E-007b, E-009,
+Run: E-001, E-002, E-002b, E-002c (+E-002c2 addendum), E-003, E-004a, E-004b, E-006, E-006a, E-007, E-007b, E-009,
 ove-time suite. Defined: E-004c, E-005, E-006b, E-008, E-010, E-011, E-012, E-013.
 Wave-3 agents additionally proposed (mapped to free IDs): E-014 frame-budget breakdown
 measured (doc 32), E-015 proxy throughput + relink fuzzing (doc 32/33), E-016
