@@ -8,3 +8,5 @@ __pycache__/
 *.log
 cache/
 media-assets/
+ktclasses/
+e004b-test.jar

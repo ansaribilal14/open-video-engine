@@ -1,0 +1,20 @@
+[package]
+name = "ove-time-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "E-004b: UniFFI Kotlin bindings experiment over the ove-time API"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["lib", "cdylib"]
+name = "ove_time_ffi"
+
+[dependencies]
+ove-time = { path = "../../../engine/ove-time" }
+uniffi = { version = "0.32", features = ["cli"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
+[workspace]

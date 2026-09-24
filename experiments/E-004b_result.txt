@@ -1,0 +1,15 @@
+=== E-004b: UniFFI Kotlin codegen + JVM runtime roundtrip ===
+toolchain: uniffi 0.32.2 (proc-macro), rustc 1.98.1, kotlinc 2.1.20 (JRE 21), JNA 5.14.0
+
+PASS R1 exact add
+PASS R2 add/sub roundtrip
+PASS R3 split roundtrip
+PASS R4 boundary floor exact
+PASS R4b just below boundary
+PASS R5 tick-axis rescale
+PASS R6 free rational -> ticks
+PASS R7 no fp on API surface
+E-004b runtime leg: 8 passed, 0 failed
+
+codegen: generated/uniffi/ove_time_ffi/ove_time_ffi.kt = 1283 lines (records, sealed enum, 6 fns, seq converters); JNA only external dep
+compile: kotlinc compiled unmodified output OK (ktlint absent -> formatting skipped, cosmetic only)

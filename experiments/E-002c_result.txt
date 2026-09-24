@@ -1,0 +1,15 @@
+E-002c timeline primary-structure benchmark (rustc -O, std only)
+track: 20000 clips, exact rationals (initial den 24000); ops = split/delete only
+starts are derived (prefix sums) — structural cost isolated from arithmetic
+sizes: Clip=24B, Piece=8B
+
+medians over 3 reps (ms) — lower is better
+workload                         vec       gap     btree     piece
+W1 cursor-split x5000           37.4       1.1       8.7      13.0
+W3 fixed-point del x2500        18.5       0.0       3.4       6.2
+W4 scatter-del x2500             9.8       7.3       1.8       3.0
+W5 walk x200 (20k)             561.8     563.0     604.1     569.6
+
+cross-structure hash equality (W1/W3/W4 x 3 reps): PASS
+btree fractional-key rekey events across all reps: 0
+NOTE: container CPU; numbers indicative, not absolute
