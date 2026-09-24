@@ -1,6 +1,14 @@
 # ADR-002: Core architecture — layered hybrid engine
 
-- **Status**: PROPOSED (blocked on GATE-1..7 + E-001/E-003/E-004/E-006)
+- **Status**: ACCEPTED (2026-09-24) — architecture-shape evidence complete for this
+  sandbox; acceptance exercised what the environment can answer: E-005 correctness
+  leg PASS (shared wgpu compositor math, 4096/4096 px exact, software Vulkan),
+  E-004c build leg PASS (core ships as Android aarch64 .so via NDK), E-004a/b FFI +
+  UniFFI legs, E-006/E-006a IPC costs quantified on BOTH sides, E-003/E-009 shared
+  command surface 36/36. **Named runtime-validation revisit triggers** (not open
+  decisions): E-005 real-GPU perf + zero-copy import, E-004c runtime JNI leg,
+  E-006b real-Tauri transport leg (environment-bound: webkit2gtk + display).
+  A re-opened trigger that contradicts the layering re-opens this ADR.
 - **Date**: 2026-09-21 · **Confidence**: MEDIUM
 
 ## CONTEXT

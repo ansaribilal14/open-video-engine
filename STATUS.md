@@ -4,7 +4,7 @@
 > IMPLEMENTED · TESTED · BENCHMARKED · EXPERIMENTAL · PARTIAL · PLANNED · BLOCKED · UNKNOWN
 > Nothing may be upgraded without evidence committed to this repository.
 
-Last updated: 2026-09-24 (experiment E-009 + research wave 3: 13 docs, 60 sources, ADR wave 2)
+Last updated: 2026-09-24 (v0.5: E-005 correctness leg PASS on software Vulkan, E-004c NDK build leg, testing constitution doc 45 + live CI, ADR-002/008/009 ACCEPTED → 6 of 11 ADRs accepted)
 
 ## Mission phases
 
@@ -12,10 +12,11 @@ Last updated: 2026-09-24 (experiment E-009 + research wave 3: 13 docs, 60 source
 |---|---|---|
 | PHASE 0 | Research infrastructure, source ledger, claim ledger | **PARTIAL** (scaffolding done; 137 sources ledgered; 7 claims tracked with evidence) |
 | PHASE 0 | Track research (editors, media, timeline, GPU, web, Android, desktop, AI, MCP + audio, captions, CV, plugins, scripting, headless, storage, performance, security, UX, licenses, YouTube, transcripts) | **PARTIAL** (v0.2: 39 of 41 research docs written, ~7,600+ lines; 13 wave-3 docs added 2026-09-24; depth requirement NOT yet met) |
-| PHASE 0 | Cross-track synthesis + knowledge base | **PARTIAL** (v0.2: ADR-001/007/010 **ACCEPTED**; ADR-002/003/004/005/006/008/009/011 PROPOSED; GATE_STATUS.md: 10/14 gates UNDERSTOOD, 4 PARTIAL with named residuals) |
-| PHASE 0 | Architecture gates 1–14 | **PARTIAL** — 10 UNDERSTOOD / 4 PARTIAL / 0 GAP (research/gates/GATE_STATUS.md) |
-| PHASE 0 | Experiments & benchmarks | **PARTIAL** — 9 experiments RUN (E-001 partial, E-002 13/13, E-002c, E-003 9/9, E-004a 5/5, E-004b 8/8, E-006 browser-leg, E-007+E-007b, **E-009 36/36**); ove-time TESTED 15/15; blocked-only-on-hardware: E-004c/E-005/E-006b |
-| PHASE 1 | Core media abstraction | **PLANNED** (first crate landed: engine/ove-time TESTED) |
+| PHASE 0 | Cross-track synthesis + knowledge base | **PARTIAL** (v0.5: ADR-001/002/007/008/009/010 **ACCEPTED**; ADR-003/004/005/006/011 PROPOSED with named evidence legs; GATE_STATUS.md: 13/14 gates UNDERSTOOD, 1 PARTIAL environment-bound) |
+| PHASE 0 | Architecture gates 1–14 | **PARTIAL** — 13 UNDERSTOOD (several v0.1 with named residuals) / 1 PARTIAL (gate 7: E-006b needs webkit2gtk+display, no root) / 0 GAP (research/gates/GATE_STATUS.md) |
+| PHASE 0 | Experiments & benchmarks | **PARTIAL** — 9 experiments RUN + 2 partial legs (E-001 partial, E-002 13/13, E-002c, E-003 9/9, E-004a 5/5, E-004b 8/8, E-006 browser-leg, E-007+E-007b, E-009 36/36; **E-005 correctness leg 4096/4096 PASS** software Vulkan, **E-004c build leg PASS** NDK aarch64); ove-time TESTED 15/15; hardware/runtime residuals: E-004c runtime (device), E-005 real-GPU perf + zero-copy, E-006b (webkit2gtk) |
+| PHASE 0 | CI | **TESTED-infra** — GitHub Actions ci.yml live (fmt + clippy -D warnings + tests + cargo-audit) on engine/ove-time; results verified after push |
+| PHASE 1 | Core media abstraction | **PLANNED** (first crate landed: engine/ove-time TESTED + fmt/clippy-clean; CI-green) |
 | PHASE 2 | Timeline engine | **PLANNED** |
 | PHASE 3 | Project system | **PLANNED** |
 | PHASE 4–22 | Decode/playback → production hardening | **PLANNED** |
@@ -24,7 +25,7 @@ Last updated: 2026-09-24 (experiment E-009 + research wave 3: 13 docs, 60 source
 
 | Doc | Topic | Status |
 |---|---|---|
-| 41_EXPERIMENTS | Experiment index + records | PARTIAL (E-001/002/002c/003/004a/004b/006/007/007b/**009** run + ove-time suite; E-004c/E-005/E-006b/E-008/E-010/E-011/E-012/E-013 defined) |
+| 41_EXPERIMENTS | Experiment index + records | PARTIAL (E-001/002/002c/003/004a/004b/004c/005/006/007/007b/**009** run + ove-time suite; E-006b/E-008/E-010/E-011/E-012/E-013 defined) |
 | 01_RESEARCH_INDEX | Index of all research | PARTIAL (v0.2) |
 | 02_EXISTING_EDITORS | New-gen open editors (OpenCut, Clypra, Cutlass, Kerf, Velocut, OpenReelio, OpenTake, Frontstage…) | PARTIAL (v0.1 scan; repo-level source study NOT done) |
 | 03_NLE_ARCHITECTURE | Kdenlive/Shotcut/Olive/Flowblade/MLT architecture | PARTIAL (v0.1) |
@@ -40,16 +41,18 @@ Last updated: 2026-09-24 (experiment E-009 + research wave 3: 13 docs, 60 source
 | 34_UX / 35_LICENSES / 36_YOUTUBE | engine↔UI contract; MIT OR Apache-2.0 verdict + RED/GREEN audit; Data API v3 pipeline | PARTIAL (v0.1, wave-3) |
 | 38_PAPERS | Academic paper index | PARTIAL (4 target papers + survey list) |
 | 40_ARCHITECTURE_COMPARISON | 3 candidate architectures | PARTIAL (options framed, not decided) |
+| 45_TESTING_STRATEGY | Testing constitution (T-1..T-10), pyramid, CI wiring | PARTIAL (v0.1 written 2026-09-24; live CI on ove-time; fuzz depth + real-media golden corpus pending) |
 | 42_RISKS / 43_OPEN_QUESTIONS | Risk register, open questions | PARTIAL (Q-09 ANSWERED) |
-| GATE_STATUS (research/gates/) | 14 architecture gates × evidence | PARTIAL (10 UNDERSTOOD / 4 PARTIAL) |
-| 44_ARCHITECTURE_WHITEPAPER | Evidence-backed architecture | **PLANNED** (blocked only on hardware-bound residuals E-005/E-004c/E-006b) |
+| GATE_STATUS (research/gates/) | 14 architecture gates × evidence | PARTIAL (13 UNDERSTOOD / 1 PARTIAL environment-bound) |
+| 44_ARCHITECTURE_WHITEPAPER | Evidence-backed architecture | **PLANNED** (all shape decisions accepted with named runtime-validation triggers — whitepaper can now be written from ADRs 001/002/007/008/009/010 + gate table) |
 
 ## Engine implementation
 
 | Subsystem | Status |
 |---|---|
-| engine/ove-time | **TESTED** — exact rational time primitives; 4 unit + 11 property tests PASS (cargo test --release); zero deps; ADR-007 encoded incl. tick-axis overflow regression guard |
-| Everything else in `engine/` | **EMPTY by design** — directive forbids building before gates pass |
+| engine/ove-time | **TESTED** — exact rational time primitives; 4 unit + 11 property tests PASS (cargo test --release); fmt-normalized, clippy-clean (-D warnings); zero deps; ADR-007 encoded incl. tick-axis overflow regression guard; runs in CI |
+| scripts/experiments/E-005_wgpu_swvk | **EXPERIMENTAL** — seed of ove-compositor: wgpu YUV→RGB + nearest-scale + over pass, pixel-exact vs host reference (software Vulkan) |
+| Everything else in `engine/` | **EMPTY by design** — build-out starts Phase 1 with ove-timeline (structure pre-decided: ADR-011) |
 
 ## Experiments
 

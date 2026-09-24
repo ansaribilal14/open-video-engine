@@ -1,0 +1,45 @@
+E-004c — Rust→Android device leg, BUILD sub-leg (2026-09-24)
+==============================================================
+
+QUESTION
+  Can the engine's Rust core (ove-time exact rationals, UniFFI surface) be
+  delivered as an Android aarch64 shared object with the full exported FFI
+  surface, without a device attached?
+
+RESULT: BUILD LEG PASS
+  cargo build --release --target aarch64-linux-android
+  linker: NDK r27c clang wrapper (aarch64-linux-android24-clang), minSdk 24
+
+  artifact : scripts/experiments/E-004b_uniffi/target/aarch64-linux-android/release/libove_time_ffi.so
+  size     : 654,568 bytes
+  format   : ELF 64-bit LSB shared object, ARM aarch64, for Android 24,
+             built by NDK r27c (12479018)
+  exported : uniffi_ove_time_ffi_fn_func_ove_time_add / _sub / _half /
+             _floor_frame / _split_roundtrip (+ per-fn checksums) — the exact
+             same FFI surface E-004b round-tripped live through Kotlin/JNA 8/8
+  needed   : libdl.so, libc.so (bionic) — minimal
+
+  environment note: Android targets are NOT installable via cargo-zigbuild's
+  bundled libc (zig 0.13 cannot satisfy -ldl/-llog/-lm/-lc for bionic —
+  'no_fallback' search fails). The real NDK was required; download
+  dl.google.com/android/repository/android-ndk-r27c-linux.zip (664 MB) and
+  extract toolchains/llvm only. Command:
+    CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=<ndk>/bin/aarch64-linux-android24-clang \
+      cargo build --release --target aarch64-linux-android
+
+CLASSIFICATION (honest)
+  BUILD leg   : PASS  (artifact + symbol surface verified via readelf)
+  RUNTIME leg : NOT RUN — System.loadLibrary + uniffi Kotlin runtime +
+                JNI callbacks require a device/emulator; this sandbox has
+                neither. Remaining E-004c residual is exactly that runtime
+                leg (device farm / local emulator when available).
+
+IMPLICATIONS
+  - ADR-001 (Rust core) device-leg risk narrows to "JNI runtime behavior",
+    not buildability — cross-compile was the only unknown this sandbox
+    could answer.
+  - The generated Kotlin (E-004b artifact, 1,423 lines) references these
+    same uniffi fn names; JNA resolves them by name — symbol match is
+    verified structurally (names) here, dynamically on-device later.
+  - CI implication: the NDK build leg is CI-automatable (ubuntu runner +
+    NDK component) — add when ove crates stabilize.

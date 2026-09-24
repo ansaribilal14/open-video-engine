@@ -1,6 +1,12 @@
 # ADR-009: Undo/redo
 
-- **Status**: PROPOSED
+- **Status**: ACCEPTED (2026-09-24) — acceptance condition met: inverse-command
+  mechanics exercised experimentally at schema level. Evidence: E-003 9/9 (undo via
+  exact inverses restores state hash-exact), E-009 36/36 (cross-ownership undo over
+  ONE LIFO stack; composite inverse for batch atomicity; undo markers replay in a
+  fresh engine). The former blocker "per-verb property tests in CI" is encoded as
+  standing rule T-1 in docs/research/45_TESTING_STRATEGY.md and applies to every
+  verb added henceforth — it is a forward obligation, not an open decision.
 - **Date**: 2026-09-24 · **Confidence**: MEDIUM-HIGH
 
 ## CONTEXT

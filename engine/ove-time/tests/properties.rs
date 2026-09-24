@@ -29,8 +29,16 @@ const CASES: u64 = 20_000;
 fn p1_add_associativity() {
     let mut rng = Rng(0xA1);
     for _ in 0..CASES {
-        let (a, b, c) = (rng.gen_rational(1_000_000), rng.gen_rational(1_000_000), rng.gen_rational(1_000_000));
-        assert_eq!(a.add(b.add(c)), a.add(b).add(c), "associativity: {a} {b} {c}");
+        let (a, b, c) = (
+            rng.gen_rational(1_000_000),
+            rng.gen_rational(1_000_000),
+            rng.gen_rational(1_000_000),
+        );
+        assert_eq!(
+            a.add(b.add(c)),
+            a.add(b).add(c),
+            "associativity: {a} {b} {c}"
+        );
     }
 }
 
@@ -48,7 +56,11 @@ fn p2_normalization_invariants() {
     }
 }
 fn gcd(mut a: i64, mut b: i64) -> i64 {
-    while b != 0 { let t = a % b; a = b; b = t; }
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
     a
 }
 
@@ -61,15 +73,26 @@ fn p3_order_invariant_sums() {
     let mut rng = Rng(0xA3);
     for case in 0..200 {
         let n = 50 + (rng.next() % 500) as usize;
-        let mut clips: Vec<Rational> =
-            (0..n).map(|_| Rational::new(1 + (rng.next() % 240_000) as i64, 24_000)).collect();
-        let f = clips.iter().copied().fold(Rational::zero(24000), |a, x| a.add(x));
-        let r = clips.iter().rev().copied().fold(Rational::zero(24000), |a, x| a.add(x));
+        let mut clips: Vec<Rational> = (0..n)
+            .map(|_| Rational::new(1 + (rng.next() % 240_000) as i64, 24_000))
+            .collect();
+        let f = clips
+            .iter()
+            .copied()
+            .fold(Rational::zero(24000), |a, x| a.add(x));
+        let r = clips
+            .iter()
+            .rev()
+            .copied()
+            .fold(Rational::zero(24000), |a, x| a.add(x));
         for i in (1..clips.len()).rev() {
             let j = (rng.next() % (i as u64 + 1)) as usize;
             clips.swap(i, j);
         }
-        let s = clips.iter().copied().fold(Rational::zero(24000), |a, x| a.add(x));
+        let s = clips
+            .iter()
+            .copied()
+            .fold(Rational::zero(24000), |a, x| a.add(x));
         assert_eq!(f, r, "case {case}: forward vs reverse");
         assert_eq!(f, s, "case {case}: forward vs shuffled");
     }
@@ -91,11 +114,19 @@ fn p3b_free_rational_accumulator_overflows() {
         }
         acc
     });
-    assert!(result.is_err(), "free-rational accumulation must overflow the i64 path quickly");
+    assert!(
+        result.is_err(),
+        "free-rational accumulation must overflow the i64 path quickly"
+    );
     // the fixed-axis equivalent must NOT panic and stays bounded on the axis
     let mut acc2 = Rational::zero(24000);
-    for _ in 0..10_000 { acc2 = acc2.add(Rational::new(1001, 24000)); }
-    assert!(acc2.den() > 0 && 24000 % acc2.den() == 0, "fixed-axis den must divide the axis");
+    for _ in 0..10_000 {
+        acc2 = acc2.add(Rational::new(1001, 24000));
+    }
+    assert!(
+        acc2.den() > 0 && 24000 % acc2.den() == 0,
+        "fixed-axis den must divide the axis"
+    );
 }
 
 /// P4: floor-to-frame is exact at boundaries where fp was off-by-one
@@ -106,7 +137,11 @@ fn p4_boundary_floor_exact() {
         let (rn, rd) = rate;
         for k in 0..5_000i64 {
             let v = Rational::new(k * rd, rn); // exactly k frames worth of time
-            assert_eq!(v.floor_div_rate(rn, rd), k, "exact boundary k={k} rate={rn}/{rd}");
+            assert_eq!(
+                v.floor_div_rate(rn, rd),
+                k,
+                "exact boundary k={k} rate={rn}/{rd}"
+            );
             // one tick below k frames must floor to k-1
             let below = v.sub(Rational::new(1, rn * rd));
             assert_eq!(below.floor_div_rate(rn, rd), k - 1, "just-below k={k}");
@@ -122,7 +157,9 @@ fn p5_no_drift_exact_rates() {
     let frame = Rational::new(1001, 24000);
     let mut t = Rational::zero(24000);
     let frames = 172_262u64; // floor(7200 * 24000/1001)
-    for _ in 0..frames { t = t.add(frame); }
+    for _ in 0..frames {
+        t = t.add(frame);
+    }
     // exact: t == frames * 1001/24000
     assert_eq!(t, Rational::new(frames as i64 * 1001, 24000));
     // frame index at that time must be exactly `frames` (boundary-adjacent, exact)
@@ -181,10 +218,15 @@ fn p9_decimal_alias_drift_exists() {
     for s in 1..=7200i64 {
         let exact = (s as f64 * (24000.0 / 1001.0)).floor() as i64;
         let alias = (s as f64 * 23.976).floor() as i64;
-        if exact != alias { diverged_at = Some(s); break; }
+        if exact != alias {
+            diverged_at = Some(s);
+            break;
+        }
     }
-    assert!(diverged_at.is_some(),
-        "decimal 23.976 must diverge from 24000/1001 at some boundary within 2h (E-002 T2)");
+    assert!(
+        diverged_at.is_some(),
+        "decimal 23.976 must diverge from 24000/1001 at some boundary within 2h (E-002 T2)"
+    );
     // and the divergence is systematic, growing without bound over 24h
     let d24 = (86400.0_f64 * (24000.0 / 1001.0)) - (86400.0 * 23.976);
     assert!(d24.abs() > 1.0, "drift must exceed one frame over 24h");

@@ -1,6 +1,13 @@
 # ADR-008: Project format
 
-- **Status**: PROPOSED
+- **Status**: ACCEPTED (2026-09-24) — acceptance condition met: the format's core
+  mechanics were exercised experimentally, not just surveyed. Evidence: E-003 9/9
+  (snapshot+log replay == apply; undo via inverses hash-exact; log JSON round-trip;
+  snapshot+suffix equivalence; float payloads diverge 300/300 → schema rules), E-009
+  36/36 (one log serves UI+agent owners; undo markers replay). Tracked engineering
+  rules: T-6/T-8/T-9 in docs/research/45_TESTING_STRATEGY.md (replay corpora,
+  crash-only persistence tests, migration fixtures). Revisit trigger: concurrent
+  multi-editor scope change, or relational-query needs at scale (option D).
 - **Date**: 2026-09-24 · **Confidence**: MEDIUM-HIGH
 
 ## CONTEXT

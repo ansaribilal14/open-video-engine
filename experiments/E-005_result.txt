@@ -1,0 +1,28 @@
+adapter: name="llvmpipe (LLVM 19.1.7, 256 bits)" driver="llvmpipe" backend=Vulkan device_type=Cpu
+adapter_class: SOFTWARE (lavapipe) — perf leg INVALID by definition
+device acquired in 26.591565ms
+composite: 4096 px checked, 4096 exact-match, 0 mismatch (tolerance=0)
+verdict: PASS
+timing_software_only: 10 renders in 1.419158ms (INVALID for any perf claim — llvmpipe, not GPU)
+total_wall: 38.714411ms
+
+--- FINDINGS (2026-09-24) ---
+1. verdict PASS: wgpu 25.0.2 render pipeline (YUV420 BT.601-limited integer conversion
+   -> nearest-neighbor scale -> over-composite) is pixel-exact vs host reference,
+   tolerance=0, 4096/4096, on rootless Mesa lavapipe (Vulkan 1.3 software, LLVM 19).
+   Stack installed via `apt download` + dpkg -x into /home/z/vkroot (no root needed);
+   env: VK_ICD_FILENAMES + LD_LIBRARY_PATH (see /home/z/vkroot/env.sh).
+2. BUG FOUND (own shader): interpolated-uv path (@location(0) uv, fullscreen triangle)
+   produced a CONSTANT (+8,+7) pixel offset on llvmpipe/wgpu — every pixel sampled a
+   translated coordinate. Root cause not chased further (likely Naga->SPIRV varyings
+   on llvmpipe); fix adopted: derive fragment coords from @builtin(position), which is
+   exact. RULE for engine compositor: frame-exact passes MUST use builtin position,
+   not interpolated UVs. (Diag mode preserved: E005_DIAG=1 -> raw YUV passthrough.)
+3. WGSL lesson: `if` is a STATEMENT in WGSL, not an expression (let x = if ... is
+   invalid); use var + if/else assignment.
+4. Classification: correctness leg RUN+PASS (software Vulkan); performance leg
+   INVALID (llvmpipe; numbers recorded, never citable); zero-copy import leg
+   (importExternalTexture / AHardwareBuffer / VK_EXT_external_memory) still
+   real-GPU/driver bound — remains E-005 residual together with real-GPU perf.
+5. Reuse: shader + harness is the seed of engine ove-compositor (pass #1: YUV->RGB,
+   nearest-scale, over).

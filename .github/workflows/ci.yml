@@ -1,0 +1,59 @@
+# CI for the open-video-engine — minimal, honest, grows with the crates.
+# Runs the ove-time constitution (docs/research/45_TESTING_STRATEGY.md §4):
+#   fmt + clippy -D warnings + tests (L1/L2) + RustSec audit (supply chain).
+# GPU legs are NOT runnable here (no GPU on runners); software-Vulkan
+# correctness legs land here when ove-compositor exists (E-005 pattern).
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    name: fmt + clippy + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/ove-time
+
+      - name: Format check
+        working-directory: engine/ove-time
+        run: cargo fmt -- --check
+
+      - name: Clippy (deny warnings)
+        working-directory: engine/ove-time
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests (unit + property, release)
+        working-directory: engine/ove-time
+        run: cargo test --release
+
+  audit:
+    name: cargo-audit (RustSec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Audit dependencies
+        working-directory: engine/ove-time
+        run: cargo audit

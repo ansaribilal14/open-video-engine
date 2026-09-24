@@ -1,6 +1,7 @@
 # ADR-011: Timeline primary data structure
 
-- **Status**: PROPOSED (evidence complete; integration pending Phase 2)
+- **Status**: PROPOSED (evidence complete; integration benchmark E-012 pending Phase 2;
+  decision text updated 2026-09-24 to fold in the E-002c2 addendum findings)
 - **Date**: 2026-09-24 · **Confidence**: MEDIUM-HIGH
 
 ## CONTEXT
@@ -28,8 +29,16 @@ D. Piece table — immutable clip arena + 16 B pieces; stable identities; O(n) m
 
 ## DECISION (provisional, to verify at integration)
 **Gap buffer as the primary per-track sequence**, matching the cursor-local edit
-pattern observed in surveyed NLEs (doc 20); plus a **derived, lazily-rebuilt ordered
-index** (BTreeMap or interval index) for random/agent access and hit-testing; clip
+pattern observed in surveyed NLEs (doc 20); plus a **derived ordered index that is an
+augmented order-statistic AVL tree** (subtree count + duration sum, implicit order
+key), incrementally maintained — NOT lazily rebuilt. E-002c2 (addendum in
+research/experiments/E-002c_timeline_structure.md) showed the AVL wins every verb
+under uniform-random edit positions (split 2.1 ms / resize 0.4 ms / move 0.9 ms @20k),
+giving O(log n) point/rank queries without an O(n) index rebuild after every cursor
+edit — the strongest known shape for agent/script-driven batch access (E-009 surface)
+where no cursor locality exists. Time-keyed BTreeMaps remain DISQUALIFIED (the
+E-002c2 single-pass rekey collision bug — 17 silent clip losses — independently
+reconfirmed the derived-starts rule; two-phase rekey mandatory if ever used). Clip
 identity = explicit ids already mandated by E-003. Piece table remains the noted
 alternative if undo-by-piece proves superior at integration.
 
