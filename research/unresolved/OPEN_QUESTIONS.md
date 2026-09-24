@@ -25,7 +25,7 @@ research pass. Nothing here may be quietly assumed.
 
 | ID | QUESTION | RESOLUTION PATH |
 |---|---|---|
-| Q-09 | Do AI agent edits and UI edits share one transaction log without schema divergence? | wrap 10 commands in stdio MCP, drive from UI + Claude Code (3-f proposal) |
+| Q-09 | Do AI agent edits and UI edits share one transaction log without schema divergence? | **ANSWERED 2026-09-24 — YES**: E-009 36/36 PASS (10 command surfaces wrapped in MCP 2026-07-28 stdio; UI/wire invocations hash-identical per step; owner-agnostic replay; cross-ownership undo; atomic batches; float payloads rejected at both edges). ADR-010 ACCEPTED. Residual: real Claude Code end-to-end run at integration |
 | Q-10 | Approval UX: which command tiers are auto-allowed vs human-gated? | doc 26 tier table → validate with ADR-027 |
 
 ## Program

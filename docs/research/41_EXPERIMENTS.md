@@ -1,6 +1,7 @@
 # 41 — EXPERIMENTS
 
-> Status: PARTIAL (8 experiments run 2026-09-23/24; E-004c/E-005/E-006b remain defined).
+> Status: PARTIAL (9 experiments run 2026-09-23/24; E-004c/E-005/E-006b remain defined;
+> E-008/E-010/E-011/E-013 proposed by wave-3 agents).
 > Records follow the directive format: QUESTION / HYPOTHESIS / IMPLEMENTATION / HARDWARE /
 > RESULT / LIMITATIONS / DECISION. Raw outputs in `experiments/`, code in
 > `scripts/experiments/`.
@@ -16,6 +17,7 @@
 | E-006 | IPC transport costs (browser leg) | [record](../../research/experiments/E-006_ipc_costs.md) | E-006_ipc_browser_leg.cjs | PARTIAL-RUN: JSON invoke fine ≤~10KB (1–24µs); 1.4MB JSON = 42% of frame budget vs binary 0.5% (~89×) → doc-17 rule numerically grounded; structuredClone SLOWER than JSON on object-heavy payloads; real-Tauri leg BLOCKED (webkit2gtk) → E-006b |
 | E-007 | Smart-render / stream-copy semantics (real media) | [record](../../research/experiments/E-007_smart_render.md) | E-007_smart_render.py | RUN: keyframe-exact copy cuts 72/72 ✓; mid-GOP copy cut selects WRONG content (1.5s request → 0.0s output) — keyframe index mandatory; timing leg invalid at micro scale → superseded by E-007b |
 | E-007b | Smart-render timing at real resolutions | [record](../../research/experiments/E-007b_real_res_timing.md) | E-007b_real_res_timing.py | RUN: 1080p keyframe-aligned copy 67–69ms duration-exact vs re-encode 458–815ms → 6.8–11.9× speedup; full re-encode 1897ms/10s → segment-copy renderer confirmed |
+| E-009 | Shared command surface: agent + UI edits in ONE log (Q-09) | [record](../../research/experiments/E-009_shared_command_surface.md) | E-009_shared_command_surface.py | RUN: 36/36 PASS — 10 command surfaces (8 payload + batch + undo) wrapped in MCP 2026-07-28 stdio; UI/wire hash-identical at every step; owner-agnostic replay; cross-ownership undo; atomic batches; float payloads rejected at both edges → ADR-010 **ACCEPTED** |
 | ove-time | Permanent property suite for exact time | [crate](../../engine/ove-time/) | engine/ove-time (cargo test) | TESTED: 15/15 PASS (4 unit + 11 properties, incl. P3b overflow regression guard) — ADR-007 acceptance condition; evidence experiments/ove-time_property_suite.txt |
 
 ## Planned / defined
@@ -25,4 +27,16 @@
 | E-004c | Real JNI on-device: thread attach, exception translation, callback marshalling | Android NDK/device |
 | E-005 | wgpu YUV compositor pass-graph (WGSL, multi-layer) | real-GPU hardware (or deeper SwiftShader debugging) |
 | E-006b | Real Tauri v2 IPC costs (invoke vs channel vs custom-protocol, incl. native side) | webkit2gtk + display in container |
+| E-008 | Audio device latency probe matrix (proposed by doc 21: WASAPI/CoreAudio/ALSA round-trip) | audio hardware |
+| E-010 | Scrub-burst harness (proposed by doc 34: hit-test + rehydrate latency under load) | timeline integration (Phase 2) |
+| E-011 | Resumable-upload drill (proposed by doc 36: 308/Range checkpoint resume against real API) | YouTube API credentials |
 | E-012 | Gap-buffer integration benchmark: far-jump cursor worst case + concurrent multi-track edits (ADR-011 revisit gate) | Phase 2 timeline integration |
+| E-013 | Real Claude Code end-to-end over the E-009 MCP server (approval tiers, receipts) | agent runtime in CI |
+
+## Experiment ID registry (avoid collisions)
+Run: E-001, E-002, E-002b, E-002c, E-003, E-004a, E-004b, E-006, E-007, E-007b, E-009,
+ove-time suite. Defined: E-004c, E-005, E-006b, E-008, E-010, E-011, E-012, E-013.
+Wave-3 agents additionally proposed (mapped to free IDs): E-014 frame-budget breakdown
+measured (doc 32), E-015 proxy throughput + relink fuzzing (doc 32/33), E-016
+range-parallel scale-out crossover (doc 30/32).
+Next free ID: **E-017**.

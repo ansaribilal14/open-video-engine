@@ -1,7 +1,7 @@
 # ADR-001: Core language
 
-- **Status**: PROPOSED (blocked on GATE-1..7 + E-004)
-- **Date**: 2026-09-21 · **Confidence**: MEDIUM
+- **Status**: ACCEPTED (2026-09-24 — E-004a 5/5, E-004b 8/8; falsification condition never triggered)
+- **Date**: 2026-09-21 · **Confidence**: MEDIUM-HIGH
 
 ## CONTEXT
 One core must serve desktop, Android (JNI/UniFFI), browser (WASM), and headless CLI.
@@ -23,10 +23,15 @@ A. Rust core · B. C++ core · C. Kotlin Multiplatform core · D. TypeScript-onl
   ecosystem (wgpu) favor Rust; [13]
 
 ## DECISION
-(Open) Provisional: Rust core + Kotlin/TS shells. Falsified if E-004 breaks.
+**Rust core + Kotlin/TS shells.** ACCEPTED 2026-09-24: the stated falsification condition
+("E-004 breaks") did not occur — E-004a (raw FFI boundary: exact i64 time across FFI,
+panic containment, handle safety) 5/5 PASS, E-004b (UniFFI 0.32 codegen → unmodified
+Kotlin compiles → live JNA roundtrip incl. boundary-floor exactness) 8/8 PASS. First
+crate `engine/ove-time` TESTED 15/15. Residual: E-004c on-device JNI validation is
+tracked under the Android architecture ADR, not this language decision.
 
 ## REJECTED ALTERNATIVES
 D (cannot reach desktop/Android natively); B (safety + hiring + FFI churn).
 
 ## CONFIDENCE & RISK
-MEDIUM. Revisit trigger: E-004 failure, UniFFI panic-semantics gaps (Q: doc 14).
+MEDIUM-HIGH. Revisit trigger: E-004c on-device failure, UniFFI panic-semantics gaps (Q: doc 14).

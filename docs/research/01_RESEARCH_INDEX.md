@@ -30,30 +30,30 @@ Status legend: ✅ researched (depth req. met) · 🔶 PARTIAL (first pass done)
 | 18 | [WEB_ARCHITECTURE](18_WEB_ARCHITECTURE.md) | E | 🔶 v0.1 | agent 3-d |
 | 19 | [PROJECT_FORMATS](19_PROJECT_FORMATS.md) | P | 🔶 v0.1 | agent 3-b |
 | 20 | [TIMELINE](20_TIMELINE.md) | C | 🔶 v0.1 | agent 3-b |
-| 21 | AUDIO | H | ⬜ | pending |
+| 21 | [AUDIO](21_AUDIO.md) | H | 🔶 v0.1 | agent W3-a |
 | 22 | [COLOR](22_COLOR.md) | I | 🔶 v0.1 | agent 3-c |
-| 23 | CAPTIONS | J | ⬜ | pending |
-| 24 | COMPUTER_VISION | K | ⬜ | pending |
+| 23 | [CAPTIONS](23_CAPTIONS.md) | J | 🔶 v0.1 | agent W3-b |
+| 24 | [COMPUTER_VISION](24_COMPUTER_VISION.md) | K | 🔶 v0.1 | agent W3-b |
 | 25 | [AI_VIDEO](25_AI_VIDEO.md) | L | 🔶 v0.1 | agent 3-f |
 | 26 | [AI_AGENTS](26_AI_AGENTS.md) | M | 🔶 v0.1 | agent 3-f |
 | 27 | [MCP](27_MCP.md) | N | 🔶 v0.1 | agent 3-f |
-| 28 | PLUGINS | O | ⬜ | pending |
-| 29 | SCRIPTING | O | ⬜ | pending |
-| 30 | HEADLESS | R | ⬜ | pending |
-| 31 | STORAGE | Q | ⬜ | pending |
-| 32 | PERFORMANCE | S | ⬜ | pending |
-| 33 | SECURITY | T | ⬜ | pending |
-| 34 | UX | U | ⬜ | pending |
-| 35 | LICENSES | W | ⬜ | pending (license data captured per-source in ledger) |
-| 36 | YOUTUBE | Z | ⬜ | pending |
-| 37 | TRANSCRIPTS | Z | ⬜ | pending |
+| 28 | [PLUGINS](28_PLUGINS.md) | O | 🔶 v0.1 | agent W3-c |
+| 29 | [SCRIPTING](29_SCRIPTING.md) | O | 🔶 v0.1 | agent W3-c |
+| 30 | [HEADLESS](30_HEADLESS.md) | R | 🔶 v0.1 | agent W3-d |
+| 31 | [STORAGE](31_STORAGE.md) | Q | 🔶 v0.1 | agent W3-d |
+| 32 | [PERFORMANCE](32_PERFORMANCE.md) | S | 🔶 v0.1 | agent W3-e |
+| 33 | [SECURITY](33_SECURITY.md) | T | 🔶 v0.1 | agent W3-e |
+| 34 | [UX](34_UX.md) | U | 🔶 v0.1 | agent W3-f |
+| 35 | [LICENSES](35_LICENSES.md) | W | 🔶 v0.1 | agent W3-f |
+| 36 | [YOUTUBE](36_YOUTUBE.md) | Z | 🔶 v0.1 | agent W3-f |
+| 37 | [TRANSCRIPTS](37_TRANSCRIPTS.md) | Z | 🔶 v0.1 | agent W3-b |
 | 38 | [PAPERS](38_PAPERS.md) | Y | 🔶 v0.1 | agent 3-f |
 | 39 | [GITHUB_RESEARCH](39_GITHUB_RESEARCH.md) | X | 🔶 v0.1 | agent 3-a |
 | 40 | [ARCHITECTURE_COMPARISON](40_ARCHITECTURE_COMPARISON.md) | A–W | 🔶 v0.1 | principal |
-| 41 | EXPERIMENTS | S | ⬜ | pending (E-001..E-005 planned) |
+| 41 | [EXPERIMENTS](41_EXPERIMENTS.md) | S | 🔶 v0.2 (9 experiment records) | principal |
 | 42 | [RISKS](../research/risks/RISK_REGISTER.md) | — | 🔶 v0.1 | principal |
 | 43 | [OPEN_QUESTIONS](../research/unresolved/OPEN_QUESTIONS.md) | — | 🔶 v0.1 | principal |
-| 44 | ARCHITECTURE_WHITEPAPER | all | ⬜ | BLOCKED on gates 1–14 |
+| 44 | ARCHITECTURE_WHITEPAPER | all | ⬜ | BLOCKED on gates 1–14 (see research/gates/GATE_STATUS.md — 10/14 UNDERSTOOD) |
 
 **Depth requirement (directive)**: important subsystems need multiple implementations +
 primary docs + literature + experiments. v0.1 is a first-pass *scan only*; the depth

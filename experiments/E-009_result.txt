@@ -1,0 +1,38 @@
+[PASS] P7 tools/list conformance: 10 command surfaces (8 payload + batch + undo); rational fields integer-only: True
+[PASS] P1 step01 [A add c1] hash-equality: direct=c211aa11be2a64e9 mcp=c211aa11be2a64e9
+[PASS] P1 step02 [B add c2] hash-equality: direct=d07de682407b07e1 mcp=d07de682407b07e1
+[PASS] P1 step03 [A move c1] hash-equality: direct=b7fa6323df91d338 mcp=b7fa6323df91d338
+[PASS] P1 step04 [B trim c2] hash-equality: direct=b2976c5614ce2b53 mcp=b2976c5614ce2b53
+[PASS] P1 step05 [B rename c2] hash-equality: direct=0c61cae7340a9058 mcp=0c61cae7340a9058
+[PASS] P1 step06 [A split c1] hash-equality: direct=ea987f5bb1954549 mcp=ea987f5bb1954549
+[PASS] P1 step07 [B batch gain/move] hash-equality: direct=d41be6431c934a23 mcp=d41be6431c934a23
+[PASS] P1 step08 [A undo (undoes B batch)] hash-equality: direct=ea987f5bb1954549 mcp=ea987f5bb1954549
+[PASS] P1 step09 [B undo (undoes A split)] hash-equality: direct=0c61cae7340a9058 mcp=0c61cae7340a9058
+[PASS] P1 step10 [A set_gain c2] hash-equality: direct=90a49053186dcb7c mcp=90a49053186dcb7c
+[PASS] P1 step11 [B add c3] hash-equality: direct=e68b6c162c11b10e mcp=e68b6c162c11b10e
+[PASS] P1 step12 [A trim c3] hash-equality: direct=c5ac4a37333fffb3 mcp=c5ac4a37333fffb3
+[PASS] P2 merged-log replay == final state: 12 entries (owners=['agent']); replay=c5ac4a37333fffb3 final=c5ac4a37333fffb3
+[PASS] P2b both owners present in one transaction log: owners in direct-path log: ['agent', 'ui']; wire log provenance: ['agent']
+[PASS] P2c direct-path log == wire-path log (schema-identical): 12 direct entries vs 12 wire entries, byte-equal sans owner tags
+[PASS] P3 cross-ownership undo (A-undo removes B batch; B-undo removes A split): c1 dur=10 gain=1 (split+batch undone); c2 name=broll_v2 (step-5 rename intact); c1b absent: True
+[PASS] P4 batch atomicity (MCP rejects whole batch): isError=True
+[PASS] P4b batch atomicity (direct path same semantics): EngineError: no clip: nope
+[PASS] P4c state+log unchanged on BOTH engines after rejected batch: hash_before=c5ac4a37333fffb3 hash_after=c5ac4a37333fffb3 wire log 12->12, direct log 12->12
+[PASS] P5 float rejection (bare float start, wire): [{'type': 'text', 'text': 'rejected: float payload forbidden by ADR-007: 1.5'}]
+[PASS] P5b float rejection (float inside num, wire): [{'type': 'text', 'text': 'rejected: non-integer rational component: 1.5'}]
+[PASS] P5c float rejection (gain float, wire + direct TypeError): mcp isError=True direct raises=True
+[PASS] P1 step01 [A add c1] hash-equality: direct=c211aa11be2a64e9 mcp=c211aa11be2a64e9
+[PASS] P1 step02 [B add c2] hash-equality: direct=d07de682407b07e1 mcp=d07de682407b07e1
+[PASS] P1 step03 [A move c1] hash-equality: direct=b7fa6323df91d338 mcp=b7fa6323df91d338
+[PASS] P1 step04 [B trim c2] hash-equality: direct=b2976c5614ce2b53 mcp=b2976c5614ce2b53
+[PASS] P1 step05 [B rename c2] hash-equality: direct=0c61cae7340a9058 mcp=0c61cae7340a9058
+[PASS] P1 step06 [A split c1] hash-equality: direct=ea987f5bb1954549 mcp=ea987f5bb1954549
+[PASS] P1 step07 [B batch gain/move] hash-equality: direct=d41be6431c934a23 mcp=d41be6431c934a23
+[PASS] P1 step08 [A undo (undoes B batch)] hash-equality: direct=ea987f5bb1954549 mcp=ea987f5bb1954549
+[PASS] P1 step09 [B undo (undoes A split)] hash-equality: direct=0c61cae7340a9058 mcp=0c61cae7340a9058
+[PASS] P1 step10 [A set_gain c2] hash-equality: direct=90a49053186dcb7c mcp=90a49053186dcb7c
+[PASS] P1 step11 [B add c3] hash-equality: direct=e68b6c162c11b10e mcp=e68b6c162c11b10e
+[PASS] P1 step12 [A trim c3] hash-equality: direct=c5ac4a37333fffb3 mcp=c5ac4a37333fffb3
+[PASS] P6 cross-process determinism: run1=c5ac4a37333fffb3 run2=c5ac4a37333fffb3
+VERDICT: SHARED COMMAND SURFACE VIABLE: one transaction log, owner-agnostic replay, cross-ownership undo, atomic batches, exact-time boundary enforced at API edge
+HARDWARE: container CPU; single host; protocol-overhead not benchmarked
