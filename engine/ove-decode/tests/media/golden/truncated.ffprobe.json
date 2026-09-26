@@ -1,0 +1,4 @@
+{
+ "expected": "unreadable",
+ "ffprobe_stderr": "[mov,mp4,m4a,3gp,3g2,mj2 @ 0x55d10e3a3d40] moov atom not found\n/home/z/my-project/open-video-engine/engine/ove-decode/tests/media/truncated.mp4: Invalid data found when processing input"
+}

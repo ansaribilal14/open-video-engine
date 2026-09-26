@@ -246,3 +246,46 @@ mod unit {
         assert_eq!(h.add(d.sub(h)), d); // left + right == original
     }
 }
+
+// ---------------------------------------------------------------------------
+// Optional serde support (feature `serde`): serialize the NORMALIZED form as
+// a (num, den) pair; deserialization re-validates the invariants (den > 0)
+// instead of trusting the input.
+// ---------------------------------------------------------------------------
+#[cfg(feature = "serde")]
+impl serde::Serialize for Rational {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        (self.num, self.den).serialize(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Rational {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let (num, den): (i64, i64) = serde::Deserialize::deserialize(d)?;
+        if den <= 0 {
+            return Err(serde::de::Error::custom("rational denominator must be > 0"));
+        }
+        Ok(Rational::new(num, den))
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use super::*;
+
+    #[test]
+    fn roundtrip_normalized() {
+        let r = Rational::new(48000, 1000);
+        let s = serde_json::to_string(&r).unwrap();
+        assert_eq!(s, "[48,1]");
+        let back: Rational = serde_json::from_str(&s).unwrap();
+        assert_eq!(back, r);
+    }
+
+    #[test]
+    fn rejects_zero_and_negative_den() {
+        assert!(serde_json::from_str::<Rational>("[1,0]").is_err());
+        assert!(serde_json::from_str::<Rational>("[1,-2]").is_err());
+    }
+}

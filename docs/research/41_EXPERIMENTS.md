@@ -37,6 +37,8 @@
 | E-010 | Scrub-burst harness (proposed by doc 34: hit-test + rehydrate latency under load) | timeline integration (Phase 2) |
 | E-011 | Resumable-upload drill (proposed by doc 36: 308/Range checkpoint resume against real API) | YouTube API credentials |
 | E-013 | Real Claude Code end-to-end over the E-009 MCP server (approval tiers, receipts) | agent runtime in CI |
+| E-017 | libav binding feasibility (W2 de-risk) | RUN — PASS: ffmpeg-sys-next 7.1.3 builds/links bundled FFmpeg 7.1 root-free; 5 lessons recorded (nasm, libclang, resource-dir, pkg-config sysroot, static-fallback trap); superseded into ove-decode | scripts/experiments/E-017_sysprobe · experiments/E-017_result.txt |
+
 
 ## Experiment ID registry (avoid collisions)
 Run: E-001, E-002, E-002b, E-002c (+E-002c2 addendum), E-003, E-004a, E-004b, E-004c (build leg), E-005 (correctness leg), E-006, E-006a, E-007, E-007b, E-009, E-012,
@@ -45,4 +47,4 @@ E-004c runtime (device), E-005 perf+zero-copy (real GPU), E-006b (webkit2gtk + d
 Wave-3 agents additionally proposed (mapped to free IDs): E-014 frame-budget breakdown
 measured (doc 32), E-015 proxy throughput + relink fuzzing (doc 32/33), E-016
 range-parallel scale-out crossover (doc 30/32).
-Next free ID: **E-017**.
+Next free ID: **E-018**.

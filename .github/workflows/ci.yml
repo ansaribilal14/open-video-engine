@@ -1,12 +1,13 @@
 # CI for the open-video-engine — minimal, honest, grows with the crates.
 # Runs the testing constitution (docs/research/45_TESTING_STRATEGY.md §4):
 #   fmt + clippy -D warnings + tests (L1/L2) + RustSec audit (supply chain).
-# Workspace-level: every member crate (currently ove-time, ove-timeline) is
-# covered by the same gates, including the e012_bench binary (compile-checked).
-# GPU legs are NOT runnable here (no GPU on runners); software-Vulkan
-# correctness legs land here when ove-compositor exists (E-005 pattern).
-# libav*-linked crates (wave 2+) will add the libav*-confinement check job
-# per DECODER_SPEC §5 — zero libav symbols outside ove-decode.
+# Workspace-level: every member crate (ove-time, ove-timeline, ove-media,
+# ove-decode) is covered by the same gates, including the e012_bench binary.
+# ove-decode links libav* via ffmpeg-sys-next with feature `build` here
+# (pinned FFmpeg 7.1 compiled from source; ubuntu runners have no FFmpeg 7
+# dev packages). Local builds use distro FFmpeg 7.1.5 via pkg-config.
+# The libav-confinement job enforces DECODER_SPEC §5: zero libav* linkage
+# outside engine/ove-decode.
 
 name: ci
 
@@ -20,10 +21,13 @@ env:
 
 jobs:
   rust:
-    name: fmt + clippy + tests (workspace)
+    name: fmt + clippy + tests (workspace, libav-linked)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install libav build prerequisites (nasm, libclang)
+        run: sudo apt-get update && sudo apt-get install -y nasm libclang-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -39,13 +43,13 @@ jobs:
         working-directory: engine
         run: cargo fmt --all -- --check
 
-      - name: Clippy deny warnings (workspace, all targets)
+      - name: Clippy deny warnings (workspace, all targets, bundled FFmpeg)
         working-directory: engine
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --features ove-decode/bundled -- -D warnings
 
-      - name: Tests unit + property, release (workspace)
+      - name: Tests unit + property + conformance, release (workspace)
         working-directory: engine
-        run: cargo test --release --all
+        run: cargo test --workspace --release --all --features ove-decode/bundled
 
   audit:
     name: cargo-audit (RustSec)
@@ -64,3 +68,20 @@ jobs:
       - name: Audit dependencies (workspace lockfile)
         working-directory: engine
         run: cargo audit
+
+  libav-confinement:
+    name: libav* confined to ove-decode (DECODER_SPEC §5)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: Dependency-graph + source confinement check
+        run: sh scripts/ci/check_libav_confinement.sh

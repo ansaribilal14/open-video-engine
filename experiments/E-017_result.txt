@@ -1,0 +1,37 @@
+E-017 — libav binding feasibility probe (W2 de-risk), 2026-09-27
+Question: can ffmpeg-sys-next produce working libav bindings + linkage in the
+rootless sandbox (and by extension CI)?
+
+Method: scripts/experiments/E-017_sysprobe (ffmpeg-sys-next 7.1.3, feature
+build = FFmpeg 7.1 compiled from source). Local env recipe:
+scripts/env_local/libav_env.sh (nasm + libclang-19 + clang resource dir +
+PKG_CONFIG_SYSROOT_DIR for distro 7.1.5 dev files fetched root-free via
+`apt-get download libav*-dev ...` + dpkg -x).
+
+RESULT (probe binary output):
+libavformat = 3999591
+libavcodec  = 4002661
+libavutil   = 3876708
+av_version_info = e85ede4
+
+Version mapping: 3999591 = 61.7.103 (libavformat), 4002661 = 61.19.101
+(libavcodec), 3876708 = 59.39.100 (libavutil) — exact ABI match with the
+distro FFmpeg 7.1.5 runtime; av_version_info = bundled 7.1 build hash.
+
+Lessons (each cost a build cycle — recorded so nobody pays twice):
+1. configure fails without nasm -> provide nasm on PATH (root-free: apt-get
+   download nasm; CI: apt-get install nasm).
+2. bindgen needs libclang -> LIBCLANG_PATH (libclang1-19 + libllvm19, root-free
+   via apt-get download; CI: apt-get install libclang-dev).
+3. Debian libclang has an ABSOLUTE compiled-in resource dir; root-free layouts
+   must override it via BINDGEN_EXTRA_CLANG_ARGS=-resource-dir=... (CI apt
+   layout needs no override).
+4. Debian multi-arch headers live under /usr/include/x86_64-linux-gnu; the
+   sys crate resolves include dirs via pkg-config variables -> set
+   PKG_CONFIG_SYSROOT_DIR to the extracted prefix.
+5. lld falls back to the STATIC libav*.a when the dev libav*.so symlink dangles
+   -> link against real runtime files (sandbox: copy .so.<maj> as .so; symlinks
+   disallowed there; normal systems use symlinks).
+
+Status: PASS — superseded into Wave-2 implementation (engine/ove-decode);
+conformance suite D-1..D-12 green on this binding.
