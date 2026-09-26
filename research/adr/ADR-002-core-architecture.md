@@ -1,6 +1,10 @@
 # ADR-002: Core architecture — layered hybrid engine
 
-- **Status**: PROPOSED (blocked on GATE-1..7 + E-001/E-003/E-004/E-006)
+- **Status**: PROPOSED (remaining blockers: E-005 real-GPU · E-004c on-device · E-006b
+  real-Tauri — the three hardware-bound residuals; GATE_STATUS 2026-09-26. The vertical
+  slice may proceed under this ADR without ACCEPT; the slice is the next falsification
+  instrument — ARCHITECTURE_AUDIT §5. Header previously listed stale blockers
+  E-001/E-003/E-004: refreshed by forensic audit D-6.)
 - **Date**: 2026-09-21 · **Confidence**: MEDIUM
 
 ## CONTEXT
