@@ -1,0 +1,9 @@
+[package]
+name = "ove-timeline"
+version = "0.1.0"
+edition = "2021"
+description = "Editor-grade timeline state machine for the open-video-engine (ADR-006/009/011)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+ove-time = { path = "../ove-time" }

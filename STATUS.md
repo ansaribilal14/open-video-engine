@@ -16,8 +16,8 @@ Last updated: 2026-09-26 (forensic audit COMPLETE — all 17 directive deliverab
 | PHASE 0 | Cross-track synthesis + knowledge base | **PARTIAL** (v0.2: ADR-001/007/010 **ACCEPTED**; ADR-002/003/004/005/006/008/009/011 PROPOSED; GATE_STATUS.md: 10/14 gates UNDERSTOOD, 4 PARTIAL with named residuals) |
 | PHASE 0 | Architecture gates 1–14 | **PARTIAL** — 10 UNDERSTOOD / 4 PARTIAL / 0 GAP (research/gates/GATE_STATUS.md) |
 | PHASE 0 | Experiments & benchmarks | **PARTIAL** — 9 experiments RUN (E-001 partial, E-002 13/13, E-002c, E-003 9/9, E-004a 5/5, E-004b 8/8, E-006 browser-leg, E-007+E-007b, **E-009 36/36**); ove-time TESTED 15/15; blocked-only-on-hardware: E-004c/E-005/E-006b |
-| PHASE 1 | Core media abstraction → **Media Foundation vertical slice** (per 2026-09-26 directive) | **EXPERIMENTAL → wave-1 starting** (ove-time TESTED 15/15 re-verified live by audit; workspace created; next: ove-timeline per ENGINE_BUILD_PLAN Wave 1) |
-| PHASE 2 | Timeline engine | **PLANNED** (Wave 1 — ove-timeline crate: gap buffer + derived index, verbs + exact inverses, property suite porting E-003/E-009 invariants) |
+| PHASE 1 | Core media abstraction → **Media Foundation vertical slice** (per 2026-09-26 directive) | **IN PROGRESS** — Wave 0 COMPLETE (CI, workspace, LICENSE, E-006a closed); Wave 1 COMPLETE (ove-timeline TESTED 21/21 local incl. release; CI green pending first remote run) |
+| PHASE 2 | Timeline engine | **Wave 1 crate LANDED 2026-09-26** — ove-timeline: cursor-buffer (ADR-011 gap-buffer class) per-track sorted sequences, verbs {add/remove/move/resize/split/retime} + exact inverses (ADR-009), atomic batches, journal replay, 8 property tests (P1–P8) + 10 unit + perf smoke (20k budgets met) |
 | PHASE 3 | Project system | **PLANNED** (Wave 5 — PROJECT_FORMAT_SPEC acceptance suite P-1..P-8) |
 | PHASE 4–22 | Decode/playback → production hardening | **PLANNED** (Waves 2–9: ove-media/ove-decode decoder-first, ove-render golden frames, ove-encode ffprobe gate, GPU promotion, audio, keyframes, platform legs) |
 
@@ -50,9 +50,10 @@ Last updated: 2026-09-26 (forensic audit COMPLETE — all 17 directive deliverab
 | Subsystem | Status |
 |---|---|
 | engine/ove-time | **TESTED** — exact rational time primitives; 4 unit + 11 property tests PASS (re-run live by audit AND after fmt/clippy alignment 2026-09-26); zero deps; ADR-007 encoded incl. tick-axis overflow regression guard; license MIT OR Apache-2.0 |
-| engine workspace | **IMPLEMENTED** — engine/Cargo.toml (members: ove-time; fmt/clippy clean at -D warnings); CI workflow .github/workflows/engine.yml (fmt+clippy+test --release) |
+| engine/ove-timeline | **TESTED (Wave 1)** — 2,224 lines: 2 gap-buffer unit + 10 verb/error unit + 8 properties (P1 inverse-identity, P2 batch-atomicity, P3 replay-determinism, P4 undo/redo-all, P5 prefix-replay, P6 sorted/no-overlap, P7 split-continuity, P8 cross-seed determinism) + 20k perf smoke (release: build 20.6ms, 1000 splits 17.8ms, moves 1.3ms, resizes 1.1ms — all within E-002c budgets); consumes ove-time (first consumer) |
+| engine workspace | **IMPLEMENTED** — engine/Cargo.toml (members: ove-time, ove-timeline; fmt/clippy clean at -D warnings); CI workflow .github/workflows/engine.yml (fmt+clippy+test --release) |
 | repo hygiene | LICENSE-MIT + LICENSE-APACHE added 2026-09-26 (LICENSE_AUDIT closed); E-006a code+raw output committed (D-1/X-5 closed); mode churn normalized (D-4 closed); orphaned engine/crates/ cache removed |
-| Everything else in `engine/` | **EMPTY by design** — no crate starts without a failing acceptance test asking for it (anti-overbuild rule) |
+| Everything else in `engine/` | **EMPTY by design** — no crate starts without a failing acceptance test asking for it (anti-overbuild rule). Two Wave-1 design catches recorded: (1) per-command full-state hashing = O(n²) streams → hashing is checkpoint-time only; (2) live-vs-replay id divergence from failed-batch counter advances → journal stores RESOLVED commands (concrete ids), replay assigns nothing |
 
 ## Experiments
 
