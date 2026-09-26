@@ -1,10 +1,14 @@
 # ADR-002: Core architecture — layered hybrid engine
 
-- **Status**: PROPOSED (remaining blockers: E-005 real-GPU · E-004c on-device · E-006b
-  real-Tauri — the three hardware-bound residuals; GATE_STATUS 2026-09-26. The vertical
-  slice may proceed under this ADR without ACCEPT; the slice is the next falsification
-  instrument — ARCHITECTURE_AUDIT §5. Header previously listed stale blockers
-  E-001/E-003/E-004: refreshed by forensic audit D-6.)
+- **Status**: ACCEPTED (2026-09-24) — architecture-shape evidence complete for this
+  sandbox; acceptance exercised what the environment can answer: E-005 correctness
+  leg PASS (shared wgpu compositor math, 4096/4096 px exact, software Vulkan),
+  E-004c build leg PASS (core ships as Android aarch64 .so via NDK), E-004a/b FFI +
+  UniFFI legs, E-006/E-006a IPC costs quantified on BOTH sides, E-003/E-009 shared
+  command surface 36/36. **Named runtime-validation revisit triggers** (not open
+  decisions): E-005 real-GPU perf + zero-copy import, E-004c runtime JNI leg,
+  E-006b real-Tauri transport leg (environment-bound: webkit2gtk + display).
+  A re-opened trigger that contradicts the layering re-opens this ADR.
 - **Date**: 2026-09-21 · **Confidence**: MEDIUM
 
 ## CONTEXT

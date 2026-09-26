@@ -1,0 +1,28 @@
+E-012 — ove-timeline integration benchmark (ADR-011 revisit gate)
+crate: engine/ove-timeline (production verb surface, exact Rational time, 24 kHz tick grid)
+N=20000 initial clips; identical scripts across Gap/Avl/Oracle; hash cross-validation after every workload
+
+W1 cursor-local split x5000 (playhead crawl: split clip under cursor, cursor advances)
+  (W1: 5000 real splits, 5436 attempts)
+  W1  gap: build+ops      5.7ms | avl:     47.4ms | oracle:      70.4ms   [build gap    1.8 / avl   94.3 / oracle     1.4] CROSS-VALIDATION OK (hash 838beba25aabca83, 25000 clips, total 2422985977 ticks)
+W2 random storm (container leg): split x5000, resize x2000, move x2000, remove+insert x500
+  W2  gap: build+ops    502.2ms | avl:     83.9ms | oracle:      74.6ms   [build gap    1.8 / avl   93.9 / oracle     1.3] CROSS-VALIDATION OK (hash 5fb44e90a050b2f8, 24750 clips, total 1224509353 ticks)
+W3 far-jump (alternate edits at track front and back — gap worst case)
+  (W3: 5000 real far-jump ops, 5000 attempts)
+  W3  gap: build+ops    471.9ms | avl:     47.2ms | oracle:      40.6ms   [build gap    1.5 / avl   93.3 / oracle     1.2] CROSS-VALIDATION OK (hash 8364df7113c1349d, 25000 clips, total 2422985977 ticks)
+W2' random storm BY ID (command leg through Timeline::apply; includes id scan + inverse computation): split x1200, resize x800
+  W2'  gap    106.7ms | avl    360.1ms | oracle     21.5ms   hashes OK (78b99ec5acab2758)
+
+W4 scrub-burst: 1000 rounds of (1 edit by id + burst of 100 hit_tests) @ N=20000
+     budget: burst p99 <= 1.0 ms (doc 34 scrub budget; hit-test + dispatch)
+  W4[gap] bursts: p50    3.397ms | p99    3.617ms | max    3.916ms  -> budget FAIL   (edit path total 102ms/1000)
+  W4[avl] bursts: p50    0.331ms | p99    0.515ms | max    1.663ms  -> budget PASS   (edit path total 155ms/1000)
+
+W5 multi-track: 8 tracks x 2500 build clips/track + 800 by-id edits interleaved + cross-track moves
+  W5[gap] build(8x2500)     3.0ms | 800 mixed edits     6.6ms | hash 63c1daa9d593ebb4
+  W5[avl] build(8x2500)    78.0ms | 800 mixed edits    21.1ms | hash 63c1daa9d593ebb4
+  W5 CROSS-VALIDATION OK
+
+
+all values single-run on container CPU — indicative relative order (E-002c methodology)
+E-012 bench complete

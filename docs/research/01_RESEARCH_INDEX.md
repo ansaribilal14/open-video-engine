@@ -50,10 +50,11 @@ Status legend: ✅ researched (depth req. met) · 🔶 PARTIAL (first pass done)
 | 38 | [PAPERS](38_PAPERS.md) | Y | 🔶 v0.1 | agent 3-f |
 | 39 | [GITHUB_RESEARCH](39_GITHUB_RESEARCH.md) | X | 🔶 v0.1 | agent 3-a |
 | 40 | [ARCHITECTURE_COMPARISON](40_ARCHITECTURE_COMPARISON.md) | A–W | 🔶 v0.1 | principal |
-| 41 | [EXPERIMENTS](41_EXPERIMENTS.md) | S | 🔶 v0.2 (9 experiment records) | principal |
+| 41 | [EXPERIMENTS](41_EXPERIMENTS.md) | S | 🔶 v0.2 (9 experiment records + E-004c/E-005 partial legs) | principal |
 | 42 | [RISKS](../research/risks/RISK_REGISTER.md) | — | 🔶 v0.1 | principal |
 | 43 | [OPEN_QUESTIONS](../research/unresolved/OPEN_QUESTIONS.md) | — | 🔶 v0.1 | principal |
-| 44 | ARCHITECTURE_WHITEPAPER | all | ⬜ | BLOCKED on gates 1–14 (see research/gates/GATE_STATUS.md — 10/14 UNDERSTOOD) |
+| 45 | [TESTING_STRATEGY](45_TESTING_STRATEGY.md) | S | 🔶 v0.1 (T-1..T-10 constitution + CI wiring, GATE-14) | principal |
+| 44 | ARCHITECTURE_WHITEPAPER | all | ⬜ | all shape ADRs accepted (001/002/007/008/009/010) with named runtime-validation triggers — whitepaper unblocked |
 
 **Depth requirement (directive)**: important subsystems need multiple implementations +
 primary docs + literature + experiments. v0.1 is a first-pass *scan only*; the depth

@@ -42,14 +42,6 @@ fn gcd128(a: i128, b: i128) -> i128 {
     a
 }
 
-// Named inherent arithmetic methods are intentional and stay: the FFI surface
-// (UniFFI, per E-004a/b) cannot expose operator overloads, so `add`/`sub`/`mul`/
-// `neg` must exist as callable names. The std::ops traits below delegate to them,
-// so operator syntax and named-call syntax are provably the same computation.
-// `should_implement_trait` is therefore addressed by construction (traits ARE
-// implemented); the allow only stops clippy from demanding the named methods be
-// removed, which the FFI requirement forbids.
-#[allow(clippy::should_implement_trait)]
 impl Rational {
     /// Construct a normalized exact rational. Panics if `den <= 0`.
     pub fn new(num: i64, den: i64) -> Self {
@@ -78,6 +70,10 @@ impl Rational {
     }
 
     /// Exact addition (i128 intermediates, overflow => panic with context).
+    /// Inherent named methods coexist with the std::ops impls below ON PURPOSE:
+    /// cross-language bindings (UniFFI, E-004b) cannot export operator traits,
+    /// so explicit names are the stable FFI surface.
+    #[allow(clippy::should_implement_trait)]
     pub fn add(self, o: Rational) -> Self {
         let g = gcd128(self.den as i128, o.den as i128);
         let lcm = (self.den as i128 / g)
@@ -97,6 +93,7 @@ impl Rational {
     }
 
     /// Exact negation.
+    #[allow(clippy::should_implement_trait)]
     pub fn neg(self) -> Self {
         Rational {
             num: -self.num,
@@ -105,11 +102,13 @@ impl Rational {
     }
 
     /// Exact subtraction.
+    #[allow(clippy::should_implement_trait)]
     pub fn sub(self, o: Rational) -> Self {
         self.add(o.neg())
     }
 
     /// Exact multiplication.
+    #[allow(clippy::should_implement_trait)]
     pub fn mul(self, o: Rational) -> Self {
         let n = (self.num as i128)
             .checked_mul(o.num as i128)

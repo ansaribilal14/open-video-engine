@@ -1,0 +1,66 @@
+# CI for the open-video-engine — minimal, honest, grows with the crates.
+# Runs the testing constitution (docs/research/45_TESTING_STRATEGY.md §4):
+#   fmt + clippy -D warnings + tests (L1/L2) + RustSec audit (supply chain).
+# Workspace-level: every member crate (currently ove-time, ove-timeline) is
+# covered by the same gates, including the e012_bench binary (compile-checked).
+# GPU legs are NOT runnable here (no GPU on runners); software-Vulkan
+# correctness legs land here when ove-compositor exists (E-005 pattern).
+# libav*-linked crates (wave 2+) will add the libav*-confinement check job
+# per DECODER_SPEC §5 — zero libav symbols outside ove-decode.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: fmt + clippy + tests (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: Format check (workspace)
+        working-directory: engine
+        run: cargo fmt --all -- --check
+
+      - name: Clippy deny warnings (workspace, all targets)
+        working-directory: engine
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests unit + property, release (workspace)
+        working-directory: engine
+        run: cargo test --release --all
+
+  audit:
+    name: cargo-audit (RustSec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Audit dependencies (workspace lockfile)
+        working-directory: engine
+        run: cargo audit

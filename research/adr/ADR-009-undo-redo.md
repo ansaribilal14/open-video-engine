@@ -1,6 +1,12 @@
 # ADR-009: Undo/redo
 
-- **Status**: PROPOSED
+- **Status**: ACCEPTED (2026-09-24) — acceptance condition met: inverse-command
+  mechanics exercised experimentally at schema level. Evidence: E-003 9/9 (undo via
+  exact inverses restores state hash-exact), E-009 36/36 (cross-ownership undo over
+  ONE LIFO stack; composite inverse for batch atomicity; undo markers replay in a
+  fresh engine). The former blocker "per-verb property tests in CI" is encoded as
+  standing rule T-1 in docs/research/45_TESTING_STRATEGY.md and applies to every
+  verb added henceforth — it is a forward obligation, not an open decision.
 - **Date**: 2026-09-24 · **Confidence**: MEDIUM-HIGH
 
 ## CONTEXT
@@ -48,3 +54,11 @@ MEDIUM-HIGH. Risks: inverse correctness for every future verb (mitigate: propert
 like E-003 per verb — "apply then inverse then apply = identity" invariant in CI);
 undo of commands with external effects (renders/analysis) = cancel-or-orphan policy
 deferred to ADR-029 headless design.
+
+## ACCEPTANCE ADDENDUM (2026-09-26 — E-012)
+T-1's per-verb invariant is no longer a forward obligation only — it is committed,
+running CI code: `engine/ove-timeline` property suite P1 (apply→inverse→identity +
+re-apply exactness, every verb, three containers), P1b (LIFO undo/redo round-trips),
+P6 (batch atomicity with composite-inverse rollback), P7 (cross-track move inverse) —
+10/10 PASS. Batch-atomic undo across the wire was already proven by E-009. New verbs
+inherit the same gate (doc 45 T-1).

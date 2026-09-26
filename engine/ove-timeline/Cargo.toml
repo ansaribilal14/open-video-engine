@@ -2,8 +2,12 @@
 name = "ove-timeline"
 version = "0.1.0"
 edition = "2021"
-description = "Editor-grade timeline state machine for the open-video-engine (ADR-006/009/011)"
 license = "MIT OR Apache-2.0"
+description = "Per-track clip sequences with exact rational time, edit verbs with exact inverses (E-012 / ADR-006/007/009/011)"
 
 [dependencies]
 ove-time = { path = "../ove-time" }
+
+[[bin]]
+name = "e012_bench"
+path = "src/bin/e012_bench.rs"
