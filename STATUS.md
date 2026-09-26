@@ -4,21 +4,22 @@
 > IMPLEMENTED · TESTED · BENCHMARKED · EXPERIMENTAL · PARTIAL · PLANNED · BLOCKED · UNKNOWN
 > Nothing may be upgraded without evidence committed to this repository.
 
-Last updated: 2026-09-24 (experiment E-009 + research wave 3: 13 docs, 60 sources, ADR wave 2)
+Last updated: 2026-09-26 (forensic audit COMPLETE — all 17 directive deliverables; Wave 0 repo integrity: workspace + CI + LICENSE + E-006a evidence chain closed)
 
 ## Mission phases
 
 | Phase | Scope | Status |
 |---|---|---|
+| FORENSIC AUDIT | Whole-repo claim verification + 17 deliverables | **COMPLETE** 2026-09-26 — research/audit/ (11 audits + OPEN_GAPS.md), docs/specs/ (6 contracts), whitepaper (PROVISIONAL FINAL), ENGINE_BUILD_PLAN (Waves 0–9), CROSS_PLATFORM_CONFORMANCE_PLAN; every STATUS claim verified against code (A1–A20); defects D-1..D-6 recorded, D-1/D-4/D-6 closed same day |
 | PHASE 0 | Research infrastructure, source ledger, claim ledger | **PARTIAL** (scaffolding done; 137 sources ledgered; 7 claims tracked with evidence) |
-| PHASE 0 | Track research (editors, media, timeline, GPU, web, Android, desktop, AI, MCP + audio, captions, CV, plugins, scripting, headless, storage, performance, security, UX, licenses, YouTube, transcripts) | **PARTIAL** (v0.2: 39 of 41 research docs written, ~7,600+ lines; 13 wave-3 docs added 2026-09-24; depth requirement NOT yet met) |
+| PHASE 0 | Track research (editors, media, timeline, GPU, web, Android, desktop, AI, MCP + audio, captions, CV, plugins, scripting, headless, storage, performance, security, UX, licenses, YouTube, transcripts) | **PARTIAL** (v0.2: 42 research files, ~8,135 lines — count corrected by audit X-7; 13 wave-3 docs added 2026-09-24; depth requirement met for 2/15 projects, partially for 6, honestly-absent for 4 — see RESEARCH_COMPLETENESS_AUDIT) |
 | PHASE 0 | Cross-track synthesis + knowledge base | **PARTIAL** (v0.2: ADR-001/007/010 **ACCEPTED**; ADR-002/003/004/005/006/008/009/011 PROPOSED; GATE_STATUS.md: 10/14 gates UNDERSTOOD, 4 PARTIAL with named residuals) |
 | PHASE 0 | Architecture gates 1–14 | **PARTIAL** — 10 UNDERSTOOD / 4 PARTIAL / 0 GAP (research/gates/GATE_STATUS.md) |
 | PHASE 0 | Experiments & benchmarks | **PARTIAL** — 9 experiments RUN (E-001 partial, E-002 13/13, E-002c, E-003 9/9, E-004a 5/5, E-004b 8/8, E-006 browser-leg, E-007+E-007b, **E-009 36/36**); ove-time TESTED 15/15; blocked-only-on-hardware: E-004c/E-005/E-006b |
-| PHASE 1 | Core media abstraction | **PLANNED** (first crate landed: engine/ove-time TESTED) |
-| PHASE 2 | Timeline engine | **PLANNED** |
-| PHASE 3 | Project system | **PLANNED** |
-| PHASE 4–22 | Decode/playback → production hardening | **PLANNED** |
+| PHASE 1 | Core media abstraction → **Media Foundation vertical slice** (per 2026-09-26 directive) | **EXPERIMENTAL → wave-1 starting** (ove-time TESTED 15/15 re-verified live by audit; workspace created; next: ove-timeline per ENGINE_BUILD_PLAN Wave 1) |
+| PHASE 2 | Timeline engine | **PLANNED** (Wave 1 — ove-timeline crate: gap buffer + derived index, verbs + exact inverses, property suite porting E-003/E-009 invariants) |
+| PHASE 3 | Project system | **PLANNED** (Wave 5 — PROJECT_FORMAT_SPEC acceptance suite P-1..P-8) |
+| PHASE 4–22 | Decode/playback → production hardening | **PLANNED** (Waves 2–9: ove-media/ove-decode decoder-first, ove-render golden frames, ove-encode ffprobe gate, GPU promotion, audio, keyframes, platform legs) |
 
 ## Research documents (docs/research/)
 
@@ -42,14 +43,16 @@ Last updated: 2026-09-24 (experiment E-009 + research wave 3: 13 docs, 60 source
 | 40_ARCHITECTURE_COMPARISON | 3 candidate architectures | PARTIAL (options framed, not decided) |
 | 42_RISKS / 43_OPEN_QUESTIONS | Risk register, open questions | PARTIAL (Q-09 ANSWERED) |
 | GATE_STATUS (research/gates/) | 14 architecture gates × evidence | PARTIAL (10 UNDERSTOOD / 4 PARTIAL) |
-| 44_ARCHITECTURE_WHITEPAPER | Evidence-backed architecture | **PLANNED** (blocked only on hardware-bound residuals E-005/E-004c/E-006b) |
+| 44_ARCHITECTURE_WHITEPAPER | Evidence-backed architecture | **PROVISIONAL FINAL** 2026-09-26 (docs/FINAL_ARCHITECTURE_WHITEPAPER.md — architecture C with 3 amendments; three hardware-bound residuals named as reopen conditions) |
 
 ## Engine implementation
 
 | Subsystem | Status |
 |---|---|
-| engine/ove-time | **TESTED** — exact rational time primitives; 4 unit + 11 property tests PASS (cargo test --release); zero deps; ADR-007 encoded incl. tick-axis overflow regression guard |
-| Everything else in `engine/` | **EMPTY by design** — directive forbids building before gates pass |
+| engine/ove-time | **TESTED** — exact rational time primitives; 4 unit + 11 property tests PASS (re-run live by audit AND after fmt/clippy alignment 2026-09-26); zero deps; ADR-007 encoded incl. tick-axis overflow regression guard; license MIT OR Apache-2.0 |
+| engine workspace | **IMPLEMENTED** — engine/Cargo.toml (members: ove-time; fmt/clippy clean at -D warnings); CI workflow .github/workflows/engine.yml (fmt+clippy+test --release) |
+| repo hygiene | LICENSE-MIT + LICENSE-APACHE added 2026-09-26 (LICENSE_AUDIT closed); E-006a code+raw output committed (D-1/X-5 closed); mode churn normalized (D-4 closed); orphaned engine/crates/ cache removed |
+| Everything else in `engine/` | **EMPTY by design** — no crate starts without a failing acceptance test asking for it (anti-overbuild rule) |
 
 ## Experiments
 
@@ -62,6 +65,7 @@ Last updated: 2026-09-24 (experiment E-009 + research wave 3: 13 docs, 60 source
 | E-004a | Rust FFI boundary pattern | RUN 5/5 |
 | E-004b | UniFFI Kotlin codegen + JVM runtime | RUN 8/8 (codegen ✓ compile ✓ live roundtrip ✓) |
 | E-006 | IPC transport costs | PARTIAL-RUN (browser leg complete; real-Tauri leg blocked → E-006b) |
+| E-006a | IPC serialization costs, native side | RE-RUN 2026-09-26 (D-1 closed: crate + raw output committed; method median-of-30; extrapolation basis corrected honestly — JSON frames ≈ 2.65+4.97 CPU-s/s at 1080p60, rule unchanged and strengthened) |
 | E-007 | Smart-render semantics (real media) | RUN (semantics 72/72 ✓; timing superseded by E-007b) |
 | E-007b | Smart-render timing at 1080p | RUN (copy 6.8–11.9× faster, duration-exact) |
 | E-009 | Shared command surface (MCP vs direct) | RUN 36/36 (Q-09 answered YES; ADR-010 → ACCEPTED) |

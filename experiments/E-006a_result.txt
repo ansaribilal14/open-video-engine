@@ -1,0 +1,15 @@
+     Running `target/release/e006a_ipc_serialization`
+E-006a native IPC serialization — re-run 2026-09-26T16:52:21Z
+method: median of 30 iterations, release build, container CPU
+payload                 | json bytes | json ser/de (ms) | bin bytes | bin ser/de (ms) | post bytes | post ser/de (ms)
+------------------------|-----------:|------------------|----------:|-----------------|-----------:|-----------------
+P1 command-batch-1000   |      74021 |  0.145 /  0.146 |     39386 |   0.021 /  0.017 |      13847 |  0.023 /  0.022
+P2 clip-snapshot-20000  |    2195717 |  4.136 /  5.144 |   1517938 |   0.886 /  0.930 |     580363 |  0.986 /  1.464
+P3 rgba-1MiB            |    4194305 |  5.592 / 10.481 |   1048584 |   2.356 /  2.351 |    1048579 |  2.432 /  2.103
+
+JSON byte-payload blowup: 4.00x (byte arrays become decimal lists)
+extrapolated 1080p RGBA JSON ser ≈ 44 ms/frame, de ≈ 83 ms/frame
+extrapolated 1080p60 one second (JSON) ≈ 2654 ms ser + 4974 ms de (one core)
+binary (bincode) same frame ≈ 18.6 ms ser + 18.6 ms de per frame — and the correct native path is no serialization at all (shared buffer/handle), making both JSON numbers pure waste
+
+verdict (expected, re-confirmed): JSON affordable for command/state scale, disqualified for frame payloads at both transport edges; frames-never-JSON rule stands (E-006 webview leg + this native leg).

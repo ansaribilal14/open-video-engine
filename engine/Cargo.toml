@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["ove-time"]
+# Future members (join as they are created, per ENGINE_BUILD_PLAN waves):
+#   ove-timeline (wave 1) - ove-media, ove-decode (wave 2) - ove-render (wave 3)
+#   ove-encode (wave 4) - ove-project + ove-engine + ove-cli (wave 5)
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["open-video-engine contributors"]
+
+[profile.release]
+debug = true          # perf benches need symbols; correctness unaffected

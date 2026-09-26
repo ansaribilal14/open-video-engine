@@ -1,0 +1,32 @@
+name: engine
+
+on:
+  push:
+    branches: [main]
+    paths: ["engine/**", ".github/workflows/engine.yml"]
+  pull_request:
+    paths: ["engine/**", ".github/workflows/engine.yml"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+      - name: Format check
+        run: cargo fmt --check --all
+        working-directory: engine
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: engine
+      - name: Tests (release, as audit re-runs them)
+        run: cargo test --release --all
+        working-directory: engine

@@ -42,26 +42,53 @@ fn gcd128(a: i128, b: i128) -> i128 {
     a
 }
 
+// Named inherent arithmetic methods are intentional and stay: the FFI surface
+// (UniFFI, per E-004a/b) cannot expose operator overloads, so `add`/`sub`/`mul`/
+// `neg` must exist as callable names. The std::ops traits below delegate to them,
+// so operator syntax and named-call syntax are provably the same computation.
+// `should_implement_trait` is therefore addressed by construction (traits ARE
+// implemented); the allow only stops clippy from demanding the named methods be
+// removed, which the FFI requirement forbids.
+#[allow(clippy::should_implement_trait)]
 impl Rational {
     /// Construct a normalized exact rational. Panics if `den <= 0`.
     pub fn new(num: i64, den: i64) -> Self {
         assert!(den > 0, "denominator must be positive");
         let g = gcd64(num, den);
-        if g > 1 { Rational { num: num / g, den: den / g } } else { Rational { num, den } }
+        if g > 1 {
+            Rational {
+                num: num / g,
+                den: den / g,
+            }
+        } else {
+            Rational { num, den }
+        }
     }
 
     /// Zero at the given rate denominator (e.g. `zero(24000)` for 24 kHz ticks).
-    pub fn zero(den: i64) -> Self { Rational::new(0, den) }
+    pub fn zero(den: i64) -> Self {
+        Rational::new(0, den)
+    }
 
-    pub fn num(&self) -> i64 { self.num }
-    pub fn den(&self) -> i64 { self.den }
+    pub fn num(&self) -> i64 {
+        self.num
+    }
+    pub fn den(&self) -> i64 {
+        self.den
+    }
 
     /// Exact addition (i128 intermediates, overflow => panic with context).
     pub fn add(self, o: Rational) -> Self {
         let g = gcd128(self.den as i128, o.den as i128);
-        let lcm = (self.den as i128 / g).checked_mul(o.den as i128).expect("denominator lcm overflow");
-        let n = (self.num as i128).checked_mul(lcm / self.den as i128).expect("numerator overflow")
-            + (o.num as i128).checked_mul(lcm / o.den as i128).expect("numerator overflow");
+        let lcm = (self.den as i128 / g)
+            .checked_mul(o.den as i128)
+            .expect("denominator lcm overflow");
+        let n = (self.num as i128)
+            .checked_mul(lcm / self.den as i128)
+            .expect("numerator overflow")
+            + (o.num as i128)
+                .checked_mul(lcm / o.den as i128)
+                .expect("numerator overflow");
         let gg = gcd128(n, lcm).max(1);
         Self::new(
             i64::try_from(n / gg).expect("result numerator exceeds i64"),
@@ -70,15 +97,26 @@ impl Rational {
     }
 
     /// Exact negation.
-    pub fn neg(self) -> Self { Rational { num: -self.num, den: self.den } }
+    pub fn neg(self) -> Self {
+        Rational {
+            num: -self.num,
+            den: self.den,
+        }
+    }
 
     /// Exact subtraction.
-    pub fn sub(self, o: Rational) -> Self { self.add(o.neg()) }
+    pub fn sub(self, o: Rational) -> Self {
+        self.add(o.neg())
+    }
 
     /// Exact multiplication.
     pub fn mul(self, o: Rational) -> Self {
-        let n = (self.num as i128).checked_mul(o.num as i128).expect("numerator overflow");
-        let d = (self.den as i128).checked_mul(o.den as i128).expect("denominator overflow");
+        let n = (self.num as i128)
+            .checked_mul(o.num as i128)
+            .expect("numerator overflow");
+        let d = (self.den as i128)
+            .checked_mul(o.den as i128)
+            .expect("denominator overflow");
         let gg = gcd128(n, d).max(1);
         Self::new(
             i64::try_from(n / gg).expect("result numerator exceeds i64"),
@@ -88,7 +126,9 @@ impl Rational {
 
     /// Exact halving (used by split operations). `num/2` floor for odd nums,
     /// with the remainder preserved by the caller via `sub`.
-    pub fn half(self) -> Self { Self::new(self.num >> 1, self.den) }
+    pub fn half(self) -> Self {
+        Self::new(self.num >> 1, self.den)
+    }
 
     /// Exact floor to an integer frame index at the given frame rate
     /// (`rate_num/rate_den` frames per second), computed in i128 — no
@@ -102,7 +142,11 @@ impl Rational {
         let d = self.den as i128 * rate_den as i128;
         let q = n / d;
         let r = n % d;
-        let q = if r != 0 && (d < 0) != (n < 0) { q - 1 } else { q };
+        let q = if r != 0 && (d < 0) != (n < 0) {
+            q - 1
+        } else {
+            q
+        };
         i64::try_from(q).expect("frame index exceeds i64")
     }
 
@@ -111,7 +155,10 @@ impl Rational {
     /// authoritative path (E-002 T1–T5).
     pub fn from_f64_seconds_quantized(secs: f64, rate_num: i64, rate_den: i64) -> Self {
         let ticks = (secs * (rate_num as f64 / rate_den as f64)).round() as i64;
-        Self::new(ticks.checked_mul(rate_den).expect("tick overflow"), rate_num)
+        Self::new(
+            ticks.checked_mul(rate_den).expect("tick overflow"),
+            rate_num,
+        )
     }
 
     /// Ticks at the given rate (exact integer): floor(value * rate).
@@ -140,19 +187,27 @@ impl fmt::Display for Rational {
 
 impl std::ops::Add for Rational {
     type Output = Rational;
-    fn add(self, o: Rational) -> Rational { Rational::add(self, o) }
+    fn add(self, o: Rational) -> Rational {
+        Rational::add(self, o)
+    }
 }
 impl std::ops::Sub for Rational {
     type Output = Rational;
-    fn sub(self, o: Rational) -> Rational { Rational::sub(self, o) }
+    fn sub(self, o: Rational) -> Rational {
+        Rational::sub(self, o)
+    }
 }
 impl std::ops::Mul for Rational {
     type Output = Rational;
-    fn mul(self, o: Rational) -> Rational { Rational::mul(self, o) }
+    fn mul(self, o: Rational) -> Rational {
+        Rational::mul(self, o)
+    }
 }
 impl std::ops::Neg for Rational {
     type Output = Rational;
-    fn neg(self) -> Rational { Rational::neg(self) }
+    fn neg(self) -> Rational {
+        Rational::neg(self)
+    }
 }
 
 #[cfg(test)]
@@ -170,7 +225,9 @@ mod unit {
         // the fp trap from E-002 T1: 10 x 0.1 != 1.0 in binary64; exact here
         let tenth = Rational::new(1, 10);
         let mut t = Rational::zero(10);
-        for _ in 0..10 { t = t.add(tenth); }
+        for _ in 0..10 {
+            t = t.add(tenth);
+        }
         assert_eq!(t, Rational::new(1, 1));
     }
 
