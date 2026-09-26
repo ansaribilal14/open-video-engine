@@ -54,3 +54,11 @@ MEDIUM-HIGH. Risks: inverse correctness for every future verb (mitigate: propert
 like E-003 per verb — "apply then inverse then apply = identity" invariant in CI);
 undo of commands with external effects (renders/analysis) = cancel-or-orphan policy
 deferred to ADR-029 headless design.
+
+## ACCEPTANCE ADDENDUM (2026-09-26 — E-012)
+T-1's per-verb invariant is no longer a forward obligation only — it is committed,
+running CI code: `engine/ove-timeline` property suite P1 (apply→inverse→identity +
+re-apply exactness, every verb, three containers), P1b (LIFO undo/redo round-trips),
+P6 (batch atomicity with composite-inverse rollback), P7 (cross-track move inverse) —
+10/10 PASS. Batch-atomic undo across the wire was already proven by E-009. New verbs
+inherit the same gate (doc 45 T-1).

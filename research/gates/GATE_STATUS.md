@@ -8,7 +8,7 @@
 | Gate | Question | Status | Evidence |
 |---|---|---|---|
 | 1 Media pipeline | demux/decode/encode/seek/color fundamentals | **UNDERSTOOD** | docs 04/05/06/22; E-007+E-007b real-media semantics + timing; E-001 decode leg 48/48; ADR-003/004/005 PROPOSED |
-| 2 Timeline model | data structure, time math, edit ops | **UNDERSTOOD** | docs 03/20; E-002 13/13 (fp falsified), E-002c 4-structure bench; ADR-006/011; ove-time TESTED 15/15 |
+| 2 Timeline model | data structure, time math, edit ops | **UNDERSTOOD** | docs 03/20; E-002 13/13 (fp falsified), E-002c 4-structure bench; ADR-006/011; ove-time TESTED 15/15; **E-012 integration (2026-09-26): ove-timeline crate, properties 10/10, budget-measured — ADR-011 ACCEPTED (REVISED: augmented AVL primary; gap+lazy-index fails 1ms scrub budget 3.62ms vs AVL 0.52ms)** |
 | 3 Rendering model | preview + export render pipeline | **UNDERSTOOD** (v0.1) | doc 08 pass-graph compiler + WGSL library; libplacebo/OBS references (S-2d*); E-007b segment scheduler |
 | 4 GPU strategy | wgpu/WebGPU compositor + video import | **UNDERSTOOD** (v0.1) | docs 08/09/10; E-001 support matrix + import paths mapped; **E-005 correctness leg PASS 4096/4096 px tolerance=0** — wgpu 25.0.2 YUV→RGB composite pixel-exact vs host reference on rootless lavapipe (Vulkan 1.3 sw); builtin-position rule for frame-exact passes; residuals: real-GPU perf (sw timings INVALID), zero-copy import legs |
 | 5 Android strategy | bridge, codec, lifecycle | **UNDERSTOOD** (v0.1) | docs 13/14/15/16; E-004a 5/5 FFI; E-004b 8/8 UniFFI→Kotlin live; FGS 6h checkpointing; **E-004c build leg PASS**: NDK r27c aarch64 .so, full uniffi surface exported, DT_NEEDED=libdl/libc; residual: runtime JNI leg (System.loadLibrary + callback dispatch) needs device |
@@ -36,12 +36,12 @@
 | 008 Project format | manifest + command log | **ACCEPTED** 2026-09-24 | T-6/T-8/T-9 rules in doc 45 |
 | 009 Undo/redo | inverse commands + markers | **ACCEPTED** 2026-09-24 | T-1 per-verb rule in doc 45 (forward obligation) |
 | 010 Command system | one API for human+AI | **ACCEPTED** 2026-09-24 | verb-set growth at integration |
-| 011 Timeline structure | gap buffer + augmented-AVL derived index | PROPOSED | E-012 integration benchmark; decision text folded E-002c2 addendum 2026-09-24 |
+| 011 Timeline structure | augmented AVL ALONE (revised at integration: gap layer rejected) | **ACCEPTED** 2026-09-26 | — (E-012: 10/10 properties + W4 scrub-budget decisive; gap buffer = noted alternative in crate) |
 
 ## Verdict
 13 of 14 gates UNDERSTOOD (several qualified "v0.1" with named residuals);
 1 PARTIAL (gate 7 desktop — E-006b real-Tauri transport, fully environment-bound:
 webkit2gtk + display need root). No gate is GAP. All architecture-shape decisions
 the sandbox can evidence are evidenced; runtime/perf validations on real hardware
-are ADR revisit triggers, not open decisions. 6 of 11 ADRs ACCEPTED
+are ADR revisit triggers, not open decisions. 7 of 11 ADRs ACCEPTED (011 added 2026-09-26 at its own integration gate)
 (001/002/007/008/009/010).

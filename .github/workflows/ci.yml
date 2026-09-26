@@ -1,5 +1,5 @@
 # CI for the open-video-engine — minimal, honest, grows with the crates.
-# Runs the ove-time constitution (docs/research/45_TESTING_STRATEGY.md §4):
+# Runs the testing constitution (docs/research/45_TESTING_STRATEGY.md §4):
 #   fmt + clippy -D warnings + tests (L1/L2) + RustSec audit (supply chain).
 # GPU legs are NOT runnable here (no GPU on runners); software-Vulkan
 # correctness legs land here when ove-compositor exists (E-005 pattern).
@@ -26,18 +26,32 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: engine/ove-time
+          workspaces: |
+            engine/ove-time
+            engine/ove-timeline
 
-      - name: Format check
+      - name: Format check (ove-time)
         working-directory: engine/ove-time
         run: cargo fmt -- --check
 
-      - name: Clippy (deny warnings)
+      - name: Clippy deny warnings (ove-time)
         working-directory: engine/ove-time
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Tests (unit + property, release)
+      - name: Tests unit + property, release (ove-time)
         working-directory: engine/ove-time
+        run: cargo test --release
+
+      - name: Format check (ove-timeline)
+        working-directory: engine/ove-timeline
+        run: cargo fmt -- --check
+
+      - name: Clippy deny warnings (ove-timeline)
+        working-directory: engine/ove-timeline
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests unit + property, release (ove-timeline, E-012 suite)
+        working-directory: engine/ove-timeline
         run: cargo test --release
 
   audit:

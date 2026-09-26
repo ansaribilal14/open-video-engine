@@ -58,3 +58,14 @@ D (v1 defer; revisit if relational queries dominate at scale).
 MEDIUM-HIGH. Risks: log growth (mitigate: snapshot compaction, E-003 P3); schema
 evolution discipline (version field + migration tests from day one); concurrent
 multi-editor editing is explicitly OUT of scope v1 (single-writer lock).
+
+## ACCEPTANCE ADDENDUM (2026-09-26 — E-012)
+The command-log half is now exercised by the production crate `engine/ove-timeline`:
+explicit ids, exact (num,den), floats forbidden, typed rejections, replay determinism
+on fresh engines (P3), undo via exact inverses (P1), batch atomicity (P6) — 10/10
+property suite. E-012 adds **schema rule #4: engine-allocated ids ride the log
+explicitly** (`Split.new_id` allocated at command-construction time; the engine never
+allocates during apply). A log with implicit allocation DIVERGES on replay once removed
+ids leave holes in the used-id set — reproduced by the oracle-equivalence property,
+then fixed and regression-locked. Remaining open half: manifest/asset on-disk layout
+(doc 31) lands with Phase 3 `ove-project` + migration tests.

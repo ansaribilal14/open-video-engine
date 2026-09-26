@@ -51,6 +51,8 @@ enough (L6). STATUS.md upgrades must name the layer that justifies them.
 command surface (ADR-010): `apply(V); apply(V⁻¹) == identity` (hash) and
 `replay(log[0..=k]) == apply(k)` on every fixture. This is ADR-009's CI rule made
 concrete; E-003/E-009 demonstrated both properties at schema level (9/9, 36/36).
+First exercised as committed engine code by E-012 (`ove-timeline` P1/P1b/P6/P7, 10/10);
+new verbs inherit the gate.
 
 **T-2 · Exact time or it doesn't ship.** Any code path that touches a timestamp must
 consume/produce ove-time rationals (or i64 ticks + rate). No f64 may appear in a

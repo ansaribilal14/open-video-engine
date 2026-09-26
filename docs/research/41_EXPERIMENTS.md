@@ -1,6 +1,6 @@
 # 41 — EXPERIMENTS
 
-> Status: PARTIAL (9 experiments run 2026-09-23/24; E-004c/E-005/E-006b remain defined;
+> Status: PARTIAL (11 experiments run 2026-09-23/26; E-004c runtime / E-005 perf / E-006b remain defined;
 > E-008/E-010/E-011/E-013 proposed by wave-3 agents).
 > 2026-09-24 update: E-005 correctness leg RUN+PASS (software Vulkan), E-004c build
 > leg PASS (NDK) — runtime/hardware residuals stay named in GATE_STATUS.
@@ -23,6 +23,7 @@
 | E-007 | Smart-render / stream-copy semantics (real media) | [record](../../research/experiments/E-007_smart_render.md) | E-007_smart_render.py | RUN: keyframe-exact copy cuts 72/72 ✓; mid-GOP copy cut selects WRONG content (1.5s request → 0.0s output) — keyframe index mandatory; timing leg invalid at micro scale → superseded by E-007b |
 | E-007b | Smart-render timing at real resolutions | [record](../../research/experiments/E-007b_real_res_timing.md) | E-007b_real_res_timing.py | RUN: 1080p keyframe-aligned copy 67–69ms duration-exact vs re-encode 458–815ms → 6.8–11.9× speedup; full re-encode 1897ms/10s → segment-copy renderer confirmed |
 | E-009 | Shared command surface: agent + UI edits in ONE log (Q-09) | [record](../../research/experiments/E-009_shared_command_surface.md) | E-009_shared_command_surface.py | RUN: 36/36 PASS — 10 command surfaces (8 payload + batch + undo) wrapped in MCP 2026-07-28 stdio; UI/wire hash-identical at every step; owner-agnostic replay; cross-ownership undo; atomic batches; float payloads rejected at both edges → ADR-010 **ACCEPTED** |
+| E-012 | Timeline structure INTEGRATION: ADR-011 revisit gate (gap+lazy-index vs augmented AVL; scrub budget; multi-track) | [record](../../research/experiments/E-012_timeline_integration.md) | engine/ove-timeline (crate; tests/properties.rs; src/bin/e012_bench.rs) | RUN: properties 10/10; bench hash-cross-validated — W4 scrub-burst DECISIVE (gap+lazy p99 3.62ms **FAIL** vs 1ms budget; AVL p99 0.52ms **PASS**); AVL wins random 6×/far-jump 10×; gap wins cursor-local 8×/by-id scan 3.4×/small-N 3.2×; **schema rule #4: engine-allocated ids ride the log explicitly** (implicit allocation diverges replay — reproduced then fixed) → ADR-011 **ACCEPTED (REVISED: AVL primary)** |
 | ove-time | Permanent property suite for exact time | [crate](../../engine/ove-time/) | engine/ove-time (cargo test) | TESTED: 15/15 PASS (4 unit + 11 properties, incl. P3b overflow regression guard) — ADR-007 acceptance condition; evidence experiments/ove-time_property_suite.txt |
 
 ## Planned / defined
@@ -35,12 +36,11 @@
 | E-008 | Audio device latency probe matrix (proposed by doc 21: WASAPI/CoreAudio/ALSA round-trip) | audio hardware |
 | E-010 | Scrub-burst harness (proposed by doc 34: hit-test + rehydrate latency under load) | timeline integration (Phase 2) |
 | E-011 | Resumable-upload drill (proposed by doc 36: 308/Range checkpoint resume against real API) | YouTube API credentials |
-| E-012 | Gap-buffer integration benchmark: far-jump cursor worst case + concurrent multi-track edits (ADR-011 revisit gate) | Phase 2 timeline integration |
 | E-013 | Real Claude Code end-to-end over the E-009 MCP server (approval tiers, receipts) | agent runtime in CI |
 
 ## Experiment ID registry (avoid collisions)
-Run: E-001, E-002, E-002b, E-002c (+E-002c2 addendum), E-003, E-004a, E-004b, E-004c (build leg), E-005 (correctness leg), E-006, E-006a, E-007, E-007b, E-009,
-ove-time suite. Defined: E-006b, E-008, E-010, E-011, E-012, E-013. Residuals:
+Run: E-001, E-002, E-002b, E-002c (+E-002c2 addendum), E-003, E-004a, E-004b, E-004c (build leg), E-005 (correctness leg), E-006, E-006a, E-007, E-007b, E-009, E-012,
+ove-time suite. Defined: E-006b, E-008, E-010, E-011, E-013. Residuals:
 E-004c runtime (device), E-005 perf+zero-copy (real GPU), E-006b (webkit2gtk + display).
 Wave-3 agents additionally proposed (mapped to free IDs): E-014 frame-budget breakdown
 measured (doc 32), E-015 proxy throughput + relink fuzzing (doc 32/33), E-016
