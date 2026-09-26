@@ -38,7 +38,7 @@
 | ID | Gap | Blocks | Work item (ROADMAP_RECONCILIATION) |
 |---|---|---|---|
 | G-1 | No timeline/commands/project code in Rust | everything above ove-time | 1 |
-| G-2 | No decoder/encoder/frame/render/export code | vertical slice | 2–5 |
+| G-2 | No decoder/encoder/frame/render/export code | vertical slice | 2–5 | RESOLVED-2026-09-27 (decoder leg): ove-media + ove-decode landed; DECODER_SPEC conformance D-1..D-12 green on committed corpus; FrameEnvelope per FRAME_CONTRACT; libav* confined to ove-decode (CI job). Encoder/render/project legs remain open (Waves 3–5) |
 | G-3 | No CI | all regression guards | 0 |
 | G-4 | No LICENSE files | public release | 0 |
 | G-5 | No device/GPU/browser validation of any engine code | VALIDATION levels | 7, 10 |
