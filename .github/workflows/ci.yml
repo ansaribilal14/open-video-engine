@@ -8,6 +8,14 @@
 # dev packages). Local builds use distro FFmpeg 7.1.5 via pkg-config.
 # The libav-confinement job enforces DECODER_SPEC §5: zero libav* linkage
 # outside engine/ove-decode.
+#
+# WAVE 0.5 SIGILL fix (ADR-012): ffmpeg-sys-next hardcodes -march=native for
+# host builds, baking the build runner's ISA into libav C objects; rust-cache
+# restores those objects onto runners with different CPUs -> SIGILL. The
+# gcc_portable.sh wrapper pins compiler-chosen C code to the x86-64 baseline
+# (libav's hand-written SIMD stays runtime-dispatched); the cache prefix is
+# bumped so pre-fix caches can never be restored; check_bundled_portability.sh
+# guards the class.
 
 name: ci
 
@@ -34,10 +42,18 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Cache cargo
+      - name: Install portable gcc wrapper (bundled FFmpeg ISA guard, ADR-012)
+        run: |
+          mkdir -p .ci-bin
+          chmod +x scripts/ci/gcc_portable.sh
+          ln -sf "$(pwd)/scripts/ci/gcc_portable.sh" .ci-bin/gcc
+          echo "$(pwd)/.ci-bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo (prefix bumped for ADR-012, pre-fix caches hold march=native objects)
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine
+          prefix-key: v2-portable-ffmpeg
 
       - name: Format check (workspace)
         working-directory: engine
@@ -50,6 +66,9 @@ jobs:
       - name: Tests unit + property + conformance, release (workspace)
         working-directory: engine
         run: cargo test --workspace --release --all --features ove-decode/bundled
+
+      - name: Portability guard (bundled artifacts must be x86-64-baseline, ADR-012)
+        run: sh scripts/ci/check_bundled_portability.sh
 
   audit:
     name: cargo-audit (RustSec)
@@ -78,10 +97,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
+      - name: Cache cargo (prefix aligned with rust job, ADR-012)
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine
+          prefix-key: v2-portable-ffmpeg
 
       - name: Dependency-graph + source confinement check
         run: sh scripts/ci/check_libav_confinement.sh
