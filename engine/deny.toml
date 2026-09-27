@@ -1,0 +1,31 @@
+# cargo-deny configuration (SECURITY_AUDIT / DEPENDENCY_AUDIT carry-forward, wave 0).
+# Core crates stay zero-dep by design; this file guards the moment deps arrive.
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Allow-list mirrors DEPENDENCY_AUDIT §2 candidates (doc 35 RED/GREEN verdicts).
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Zlib",
+  "CDLA-Permissive-2.0",
+]
+# GPL/LGPL must NEVER appear here — codec stacks stay in adapter crates with
+# the doc-35 build discipline (dynamic linking, lgpl-only FFmpeg builds).
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

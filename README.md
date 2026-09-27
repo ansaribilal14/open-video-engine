@@ -19,12 +19,9 @@ docs/
 research/
   sources/                    # SOURCE_LEDGER.md — every source, recoverable
   claims/                     # CLAIM_EVIDENCE_LEDGER.md — beliefs tracked to evidence
-  github/                     # Per-repository analysis
-  papers/ youtube/ transcripts/ conferences/
-  experiments/ benchmarks/    # EXPERIMENT_RECORDS per directive format
-  architecture/               # Architecture options + dependency graphs
-  adr/                        # Architecture Decision Records (36 planned)
-  comparisons/ licenses/ risks/ unresolved/ synthesis/
+  github/ papers/ youtube/ transcripts/ conferences/    # currently EMPTY — deep-study outputs land here; today per-topic findings live in docs/research/ (numbered)
+  experiments/ benchmarks/    # EXPERIMENT_RECORDS per directive format; benchmark files under research/experiments/
+  architecture/ comparisons/ licenses/                  # currently EMPTY (aspirational); active: adr/, risks/, unresolved/, synthesis/, audit/
 engine/                       # (future) engine implementation — empty until gates pass
 apps/                         # (future) editor clients — empty until engine proves itself
 scripts/                      # research + benchmark tooling

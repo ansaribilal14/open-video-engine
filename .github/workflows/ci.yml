@@ -1,0 +1,53 @@
+# CI v1 — minimum honest regression guard (CURRENT_STATE_AUDIT D-3).
+# Scope: the one real crate (ove-time) + experiment crates must at least compile.
+# Experiments stay manual (their harnesses need Chrome/JVM/ffmpeg); the property
+# suite and unit tests become CI-enforced invariants.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ove-time:
+    name: ove-time test suite (15/15 gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Unit + property tests (--release, per ADR-007 acceptance protocol)
+        working-directory: engine/ove-time
+        run: cargo test --release
+      - name: rustfmt check
+        working-directory: engine/ove-time
+        run: cargo fmt --check
+      - name: clippy (deny warnings)
+        working-directory: engine/ove-time
+        run: cargo clippy --release -- -D warnings
+
+  e006a-compile:
+    name: E-006a bench compiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo check (release)
+        working-directory: scripts/experiments/E-006a_ipc_crate
+        run: cargo check --release
+
+  deny:
+    name: cargo-deny (advisories / licenses / bans)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: engine/Cargo.toml
+# Deferred from CI v1 by choice: md-link check (lychee) — external-network
+# flakiness would produce chronic red X's on a docs-heavy repo; revisit when
+# the docs stop pointing at external sources of record (engineering decision,
+# not an omission: recorded in worklog 2026-09-27).

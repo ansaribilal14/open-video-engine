@@ -1,0 +1,16 @@
+E-006a re-run (2026-09-27) — native-side IPC serialization
+timing: 3 warmup + 31 iters, min/median, ms; sizes: bytes
+
+| payload | json bytes | json ser/de (ms) | bincode ser/de (ms) | postcard bytes | bincode bytes |
+|---|---|---|---|---|---|
+| 1 000-command batch | 51754 | 0.113 / 0.156 | 0.034 / 0.036 | 10760 | 36249 |
+  json/bincode size ratio: 1.43x
+| 20 000-clip snapshot | 2065688 | 3.900 / 4.773 | 0.724 / 0.931 | 529284 | 1388898 |
+  json/bincode size ratio: 1.49x
+| 1 MiB RGBA | 3745109 | 9.348 / 15.919 | 2.276 / 2.329 | 1048579 | 1048584 |
+  json blowup on byte payload: 3.57x; json/bincode ratio: 3.57x
+
+extrapolation (linear in bytes from 1 MiB): 1080p RGBA frame ≈ 74 ms json ser (de 125 ms)
+  1080p60 one second ≈ 4454 ms ser + 7520 ms de (one core) — vs memcpy-scale on the binary path
+  (original-run cross-check: json ser 1 MiB was 10.67 ms; bincode path is memcpy-scale)
+  raw json ser 1 MiB this run: 9.347 ms

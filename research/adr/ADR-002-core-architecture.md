@@ -1,6 +1,6 @@
 # ADR-002: Core architecture — layered hybrid engine
 
-- **Status**: PROPOSED (blocked on GATE-1..7 + E-001/E-003/E-004/E-006)
+- **Status**: PROPOSED (blocked only on GATE-4/5/7 residuals: E-005 real-GPU, E-004c device, E-006b real-Tauri + GATE-14 testing-strategy doc; refreshed 2026-09-27 per CURRENT_STATE_AUDIT D-6 — see research/gates/GATE_STATUS.md for the authoritative statement)
 - **Date**: 2026-09-21 · **Confidence**: MEDIUM
 
 ## CONTEXT

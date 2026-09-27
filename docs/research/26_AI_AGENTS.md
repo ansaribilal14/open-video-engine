@@ -125,3 +125,22 @@ AI output must resolve to editor commands; nothing may bypass the engine.
   Need an experiment on long-documentary projects before deciding.
 - Q: Plan-mode UX for edits — diff visualization of command batches needs design input
   (track U / 34_UX).
+
+## 9. Addendum (2026-09-27) — user-supplied agent-skills-ecosystem links, verified + ledgered
+
+The principal supplied 5 GitHub links during the forensic audit. All 5 were verified live
+(HTTP 200 + raw README fetch, unauthenticated) — **all real**, in contrast to the R-11
+fabricated set. All belong to the AI-agent-skills ecosystem, not video engineering.
+Ledger rows: `research/sources/LEDGER_S5a.md` (S-5a0..S-5a4).
+
+| Link | What it actually is | Verdict for this engine |
+|---|---|---|
+| NVIDIA/SkillSpector (S-5a0) | Security scanner for agent skills: 71 patterns / 17 categories incl. MCP tool poisoning + least privilege; dataset subset 31,132 skills → 26.1% vulnerable, 5.2% malicious; scan→sign→catalog pipeline (Apache-2.0) | **Adopt as design input for the ADR-010 approval tiers + doc 33 supply-chain rules** — the ecosystem-level numbers justify fail-closed vetting of any third-party editing skills; concrete template for P-017 mitigation |
+| reticlehq/reticle (S-5a1) | Verification harness for agent claims: drives the real app, returns pass/fail/**couldn't-tell** + file:line; MCP server; dry-run init (Apache-2.0 + FSL — file-level license check needed before reuse) | **Adopt the tri-state verdict + evidence-pointer receipt shape for E-013** (real-agent E2E) and ADR-010 receipts; "couldn't tell" as first-class outcome matches the directive's no-fake-completion rule |
+| JayPokale/Chisle (S-5a2) | Injected ruleset cutting agent output tokens (~44% claim, losing runs published, MIT) | Contextual only — chain-cost hygiene for agent-driven command batches; no design influence |
+| ibelick/ui-skills (S-5a3) | MCP-hosted registry of UI skills (`list_skills`/`get_skill`, MIT) | Contextual only — distribution pattern template for future vetted "editing recipe" skills; UI content gated behind DO-NOT-OVERBUILD |
+| dmmulroy/anti-slop (S-5a4) | Vendored Oxlint ruleset vs low-evidence TS/JS patterns, shipped as agent skill | Contextual only — future web-shell lint rigor; vendored-skill merge flow is a useful pattern |
+
+Net effect: no architecture change; two concrete adoptions (skill vetting for the command
+surface, receipt/verdict vocabulary for E-013) recorded as inputs to ADR-027 work and the
+E-013 definition in 41_EXPERIMENTS.

@@ -4,13 +4,13 @@
 > IMPLEMENTED · TESTED · BENCHMARKED · EXPERIMENTAL · PARTIAL · PLANNED · BLOCKED · UNKNOWN
 > Nothing may be upgraded without evidence committed to this repository.
 
-Last updated: 2026-09-24 (experiment E-009 + research wave 3: 13 docs, 60 sources, ADR wave 2)
+Last updated: 2026-09-27 (forensic audit wave committed: research/audit/ 12 docs + OPEN_GAPS + specs + build plan + whitepaper; work-item-0 repairs done: E-006a code+raw restored & re-run, CI v1, LICENSE-MIT/APACHE, ADR-002 header refresh, README layout fix, mode churn normalized; sources +5 = 214 total: user-supplied agent-skills-ecosystem links verified live — see LEDGER_S5a.md)
 
 ## Mission phases
 
 | Phase | Scope | Status |
 |---|---|---|
-| PHASE 0 | Research infrastructure, source ledger, claim ledger | **PARTIAL** (scaffolding done; 137 sources ledgered; 7 claims tracked with evidence) |
+| PHASE 0 | Research infrastructure, source ledger, claim ledger | **PARTIAL** (scaffolding done; 214 sources ledgered across 8 ledger files; 7 claims tracked with evidence; forensic audit wave 2026-09-26/27 adds research/audit/ 12 docs) |
 | PHASE 0 | Track research (editors, media, timeline, GPU, web, Android, desktop, AI, MCP + audio, captions, CV, plugins, scripting, headless, storage, performance, security, UX, licenses, YouTube, transcripts) | **PARTIAL** (v0.2: 39 of 41 research docs written, ~7,600+ lines; 13 wave-3 docs added 2026-09-24; depth requirement NOT yet met) |
 | PHASE 0 | Cross-track synthesis + knowledge base | **PARTIAL** (v0.2: ADR-001/007/010 **ACCEPTED**; ADR-002/003/004/005/006/008/009/011 PROPOSED; GATE_STATUS.md: 10/14 gates UNDERSTOOD, 4 PARTIAL with named residuals) |
 | PHASE 0 | Architecture gates 1–14 | **PARTIAL** — 10 UNDERSTOOD / 4 PARTIAL / 0 GAP (research/gates/GATE_STATUS.md) |
