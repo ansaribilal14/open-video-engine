@@ -4,12 +4,20 @@
 > IMPLEMENTED · TESTED · BENCHMARKED · EXPERIMENTAL · PARTIAL · PLANNED · BLOCKED · UNKNOWN
 > Nothing may be upgraded without evidence committed to this repository.
 
-Last updated: 2026-09-27 (v0.8 — WAVE 2 LANDED: ove-media + ove-decode per DECODER_SPEC /
-FRAME_CONTRACT; conformance suite D-1..D-12 GREEN on committed self-generated corpus with
-committed ffprobe golden tables; libav* linkage confined to ove-decode, CI-enforced;
-E-017 libav binding probe record added. v0.7 had reconciled the parallel audit+Wave0/1
-line with remote v0.5/v0.6 (E-012 augmented-AVL ove-timeline; local gap-buffer crate
-superseded, preserved at ee31fb9).)
+Last updated: 2026-09-27 (v0.9 — FRESH-SESSION TAKEOVER: CI SIGILL (bundled
+conformance) root-caused to ffmpeg-sys-next's hardcoded `-march=native` +
+rust-cache cross-runner restore of non-portable libav C objects (objdump-
+verified `zmm` stores in h264dec.o); FIXED via portable gcc wrapper + cache
+prefix bump + portability regression guard — ADR-012; conformance NOT weakened.
+60/60 re-verified locally on BOTH libav paths. Takeover audit:
+research/audit/FRESH_TAKEOVER_AUDIT.md; single work order now
+docs/MASTER_ENGINE_STATE.md. v0.8 was WAVE 2: ove-media + ove-decode per
+DECODER_SPEC / FRAME_CONTRACT; conformance suite D-1..D-12 GREEN on committed
+self-generated corpus with committed ffprobe golden tables; libav* linkage
+confined to ove-decode, CI-enforced; E-017 libav binding probe record added.
+v0.7 had reconciled the parallel audit+Wave0/1 line with remote v0.5/v0.6
+(E-012 augmented-AVL ove-timeline; local gap-buffer crate superseded,
+preserved at ee31fb9).)
 
 ## Mission phases
 
@@ -21,7 +29,7 @@ superseded, preserved at ee31fb9).)
 | PHASE 0 | Cross-track synthesis + knowledge base | **PARTIAL** (v0.7: ADR-001/002/007/008/009/010/011 **ACCEPTED** (002 with named runtime-validation revisit triggers; 011 REVISED at its integration gate 2026-09-26); ADR-003/004/005/006 PROPOSED with named evidence legs) |
 | PHASE 0 | Architecture gates 1–14 | **PARTIAL** — 13 UNDERSTOOD (several v0.1 with named residuals) / 1 PARTIAL (gate 7: E-006b needs webkit2gtk+display, no root) / 0 GAP (research/gates/GATE_STATUS.md; UPDATED_GATE_STATUS.md = audit-day snapshot) |
 | PHASE 0 | Experiments & benchmarks | **PARTIAL** — 10 experiments RUN + 2 partial legs (E-001 partial, E-002 13/13, E-002c, E-003 9/9, E-004a 5/5, E-004b 8/8, E-006 browser-leg, E-007+E-007b, E-009 36/36, **E-012 10/10 + cross-validated bench**; E-005 correctness leg 4096/4096 software-Vulkan, E-004c build leg NDK aarch64); ove-time TESTED 15/15; ove-timeline TESTED 10/10; hardware/runtime residuals: E-004c runtime (device), E-005 real-GPU perf + zero-copy, E-006b (webkit2gtk) |
-| PHASE 0 | CI | **TESTED-infra** — GitHub Actions ci.yml (fmt + clippy -D warnings + tests release across all 4 crates incl. libav-linked ove-decode via bundled FFmpeg 7.1, cargo-audit, **libav-confinement job**) |
+| PHASE 0 | CI | **TESTED-infra** — GitHub Actions ci.yml (fmt + clippy -D warnings + tests release across all 4 crates incl. libav-linked ove-decode via bundled FFmpeg 7.1, cargo-audit, **libav-confinement job**); 2026-09-27: bundled-path SIGILL root-caused & fixed (ADR-012 portable gcc wrapper + rust-cache prefix bump + check_bundled_portability.sh guard step) |
 | PHASE 1 | Core media abstraction → **Media Foundation vertical slice** (per 2026-09-26 directive) | **IN PROGRESS** — Wave 0 COMPLETE; Wave 1 gap-buffer crate superseded by E-012 AVL crate; **Wave 2 COMPLETE 2026-09-27: ove-media (TESTED 13/13) + ove-decode (TESTED 20/20: D-1..D-12 conformance + probe integration)** |
 | PHASE 2 | Timeline engine | **LANDED 2026-09-26** — engine/ove-timeline (E-012): verbs with exact inverses, batch atomicity, undo/redo, typed errors; 10/10 properties (verb identity triples, oracle equivalence, replay determinism, threaded shard leg); augmented AVL primary per ADR-011, gap buffer noted alternative |
 | PHASE 3 | Project system | **PLANNED** (Wave 5 — PROJECT_FORMAT_SPEC acceptance suite P-1..P-8) |
