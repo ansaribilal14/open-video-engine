@@ -15,17 +15,24 @@ and servers are all **clients of the same engine**.
 ```
 docs/
   MISSION_DIRECTIVE.md        # The governing mission directive (verbatim)
-  research/                   # Numbered research documents (01..44, per directive)
+  DEV_ENV.md                  # Canonical unprivileged build recipe (60/60 reproducible)
+  specs/                      # Normative contracts (FRAME_CONTRACT, DECODER_SPEC, ...)
+  research/                   # Numbered research documents (01..45, per directive)
 research/
+  adr/                        # Architecture decision records (001..012)
+  audit/                      # Forensic audits incl. FRESH_TAKEOVER_AUDIT.md
   sources/                    # SOURCE_LEDGER.md — every source, recoverable
   claims/                     # CLAIM_EVIDENCE_LEDGER.md — beliefs tracked to evidence
-  github/ papers/ youtube/ transcripts/ conferences/    # currently EMPTY — deep-study outputs land here; today per-topic findings live in docs/research/ (numbered)
-  experiments/ benchmarks/    # EXPERIMENT_RECORDS per directive format; benchmark files under research/experiments/
-  architecture/ comparisons/ licenses/                  # currently EMPTY (aspirational); active: adr/, risks/, unresolved/, synthesis/, audit/
-engine/                       # (future) engine implementation — empty until gates pass
-apps/                         # (future) editor clients — empty until engine proves itself
-scripts/                      # research + benchmark tooling
+  experiments/ gates/ risks/ unresolved/ synthesis/      # evidence + decision tracking
+engine/                       # The engine workspace (Rust):
+  ove-time                    # exact rational time (TESTED)
+  ove-timeline                # edit verbs, undo/redo, AVL structure (TESTED)
+  ove-media                   # asset identity, FrameEnvelope, frame pool (TESTED)
+  ove-decode                  # decoder abstraction + FFmpeg-SW adapter (TESTED, libav-confined)
+experiments/                  # experiment harness sources
+scripts/                      # corpus generation, CI guards, env recipes
 STATUS.md                     # Honest subsystem status (IMPLEMENTED/TESTED/.../PLANNED)
+docs/MASTER_ENGINE_STATE.md   # The single current work order
 ```
 
 ## Rules this repository enforces on itself
@@ -43,11 +50,16 @@ STATUS.md                     # Honest subsystem status (IMPLEMENTED/TESTED/.../
 
 ## Current phase
 
-**PHASE 0 — Research infrastructure + evidence gathering (v0.1 in progress).**
-See `STATUS.md` and `docs/research/01_RESEARCH_INDEX.md` for what is actually known,
-partially known, or open.
+**Waves 0–2 landed (v0.8): four engine crates TESTED, decoder conformance
+D-1..D-12 green, CI-enforced libav confinement.** Current work order:
+`docs/MASTER_ENGINE_STATE.md` (single source of truth). Detailed per-subsystem
+status: `STATUS.md`.
 
 ## License
 
-TBD — pending the licensing audit (directive TRACK W). Do not assume permissive
-licensing is compatible with all candidate dependencies (notably GPL/LGPL codec stacks).
+The engine's own code is dual-licensed `MIT OR Apache-2.0` (LICENSE-MIT,
+LICENSE-APACHE, per-crate `license` fields). Dependency license discipline is
+audited in `docs/research/35_LICENSES.md`; libav* linkage is isolated to
+`engine/ove-decode` and configured LGPL-only (DECODER_SPEC §4). Distribution
+strategy for codec-dependent artifacts remains gated on the wave-21
+production-readiness audit.

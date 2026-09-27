@@ -74,3 +74,20 @@ cargo fmt --check && cargo clippy --release --workspace
   for THIS container's unprivileged workflow.
 * Standing security rule: GitHub PATs are used for `git push` only, never written
   to any repo file, and must be rotated after appearing in any chat context.
+
+## 6. Bundled-feature builds locally (ADR-012 rule)
+
+The `ove-decode/bundled` feature compiles FFmpeg via ffmpeg-sys-next, whose
+build.rs hardcodes `-march=native -mtune=native`. Artifacts built that way
+execute ONLY on the building CPU (CI SIGILL class — see ADR-012). For any
+local bundled build, route gcc through the portable wrapper FIRST on PATH:
+
+```bash
+mkdir -p .ci-bin && ln -sf "$(pwd)/scripts/ci/gcc_portable.sh" .ci-bin/gcc
+export PATH="$(pwd)/.ci-bin:$PATH"     # basename MUST be `gcc`
+cd engine && cargo test --workspace --release --all --features ove-decode/bundled
+sh scripts/ci/check_bundled_portability.sh   # must PASS
+```
+
+Verifying the marker file `/tmp/ove-portable-gcc/marked` exists proves the
+wrapper intercepted the build (expect 60/60 tests + guard PASS).
