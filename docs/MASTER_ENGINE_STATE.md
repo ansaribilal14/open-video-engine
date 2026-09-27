@@ -6,7 +6,15 @@
 
 WAVE: 0 / 0.5 / 0.6 (takeover audit + CI SIGILL resolution + contract reconciliation start)
 DATE: 2026-09-27
-COMMIT: see "Current commit" below (updated per wave)
+COMMIT: `b6f58c99c9d3` (main; PR #1 merged)
+
+## CI CONFIRMATION (2026-09-27)
+
+- PR #1 run 36303605420: ALL 3 JOBS GREEN (fresh portable build; wrapper
+  marker present; guard scanned 1445 objects PASS; conformance 14/14).
+- Post-merge main run 36304226310: ALL 3 JOBS GREEN — the original failure
+  scenario (cache restored from another runner) now passes with portable
+  artifacts; conformance 14/14; portability guard PASS.
 
 ## Current commit
 
