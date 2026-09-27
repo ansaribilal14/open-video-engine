@@ -1,0 +1,24 @@
+[package]
+name = "ove-decode"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Decoder abstraction + FFmpeg-SW adapter for the open-video-engine (ADR-004, DECODER_SPEC). The ONLY crate allowed to link libav* (DECODER_SPEC §5 gate)."
+
+[dependencies]
+ove-time = { path = "../ove-time" }
+ove-media = { path = "../ove-media" }
+ffmpeg-sys-next = { version = "7.1", default-features = false, features = [
+    "avformat",
+    "avcodec",
+] }
+
+[features]
+# CI-only: compile the pinned FFmpeg 7.1 from source (ubuntu runners have no
+# libav*-dev for FFmpeg 7). Local builds use distro FFmpeg 7.1.5 via pkg-config
+# (scripts/env_local/libav_env.sh). Same major.minor on both sides = identical
+# decode behavior for the committed conformance corpus.
+bundled = ["ffmpeg-sys-next/build"]
+
+[dev-dependencies]
+serde_json = "1"

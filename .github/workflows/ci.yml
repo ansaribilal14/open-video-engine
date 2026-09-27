@@ -1,7 +1,13 @@
-# CI v1 — minimum honest regression guard (CURRENT_STATE_AUDIT D-3).
-# Scope: the one real crate (ove-time) + experiment crates must at least compile.
-# Experiments stay manual (their harnesses need Chrome/JVM/ffmpeg); the property
-# suite and unit tests become CI-enforced invariants.
+# CI for the open-video-engine — minimal, honest, grows with the crates.
+# Runs the testing constitution (docs/research/45_TESTING_STRATEGY.md §4):
+#   fmt + clippy -D warnings + tests (L1/L2) + RustSec audit (supply chain).
+# Workspace-level: every member crate (ove-time, ove-timeline, ove-media,
+# ove-decode) is covered by the same gates, including the e012_bench binary.
+# ove-decode links libav* via ffmpeg-sys-next with feature `build` here
+# (pinned FFmpeg 7.1 compiled from source; ubuntu runners have no FFmpeg 7
+# dev packages). Local builds use distro FFmpeg 7.1.5 via pkg-config.
+# The libav-confinement job enforces DECODER_SPEC §5: zero libav* linkage
+# outside engine/ove-decode.
 
 name: ci
 
@@ -10,44 +16,72 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  ove-time:
-    name: ove-time test suite (15/15 gate)
+  rust:
+    name: fmt + clippy + tests (workspace, libav-linked)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install libav build prerequisites (nasm, libclang)
+        run: sudo apt-get update && sudo apt-get install -y nasm libclang-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Unit + property tests (--release, per ADR-007 acceptance protocol)
-        working-directory: engine/ove-time
-        run: cargo test --release
-      - name: rustfmt check
-        working-directory: engine/ove-time
-        run: cargo fmt --check
-      - name: clippy (deny warnings)
-        working-directory: engine/ove-time
-        run: cargo clippy --release -- -D warnings
 
-  e006a-compile:
-    name: E-006a bench compiles
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: cargo check (release)
-        working-directory: scripts/experiments/E-006a_ipc_crate
-        run: cargo check --release
-
-  deny:
-    name: cargo-deny (advisories / licenses / bans)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          manifest-path: engine/Cargo.toml
-# Deferred from CI v1 by choice: md-link check (lychee) — external-network
-# flakiness would produce chronic red X's on a docs-heavy repo; revisit when
-# the docs stop pointing at external sources of record (engineering decision,
-# not an omission: recorded in worklog 2026-09-27).
+          workspaces: engine
+
+      - name: Format check (workspace)
+        working-directory: engine
+        run: cargo fmt --all -- --check
+
+      - name: Clippy deny warnings (workspace, all targets, bundled FFmpeg)
+        working-directory: engine
+        run: cargo clippy --workspace --all-targets --features ove-decode/bundled -- -D warnings
+
+      - name: Tests unit + property + conformance, release (workspace)
+        working-directory: engine
+        run: cargo test --workspace --release --all --features ove-decode/bundled
+
+  audit:
+    name: cargo-audit (RustSec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Audit dependencies (workspace lockfile)
+        working-directory: engine
+        run: cargo audit
+
+  libav-confinement:
+    name: libav* confined to ove-decode (DECODER_SPEC §5)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: Dependency-graph + source confinement check
+        run: sh scripts/ci/check_libav_confinement.sh

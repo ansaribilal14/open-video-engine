@@ -1,34 +1,19 @@
-    Finished `release` profile [optimized] target(s) in 0.00s
-     Running unittests src/lib.rs (target/release/deps/ove_time-c14c8403ac6beed9)
-
-running 4 tests
+=== ove-time property suite — re-run 2026-09-26T16:53:34Z after fmt-normalization + clippy alignment (behavior unchanged) ===
 test unit::boundary_floor_exact ... ok
 test unit::exact_add_no_fp ... ok
 test unit::half_roundtrip_odd ... ok
 test unit::normalization ... ok
-
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-     Running tests/properties.rs (target/release/deps/properties-f1021d5f3863d5a2)
-
-running 11 tests
 test p10_large_magnitude_exact ... ok
-test p2_normalization_invariants ... ok
 test p1_add_associativity ... ok
+test p2_normalization_invariants ... ok
 test p3b_free_rational_accumulator_overflows ... ok
 test p4_boundary_floor_exact ... ok
-test p3_order_invariant_sums ... ok
 test p5_no_drift_exact_rates ... ok
+test p3_order_invariant_sums ... ok
 test p7_split_invariant ... ok
-test p8_total_order ... ok
-test p9_decimal_alias_drift_exists ... ok
 test p6_add_sub_roundtrip ... ok
-
+test p9_decimal_alias_drift_exists ... ok
+test p8_total_order ... ok
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
-
-   Doc-tests ove_time
-
-running 0 tests
-
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-

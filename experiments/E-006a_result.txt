@@ -1,16 +1,15 @@
-E-006a re-run (2026-09-27) — native-side IPC serialization
-timing: 3 warmup + 31 iters, min/median, ms; sizes: bytes
+     Running `target/release/e006a_ipc_serialization`
+E-006a native IPC serialization — re-run 2026-09-26T16:52:21Z
+method: median of 30 iterations, release build, container CPU
+payload                 | json bytes | json ser/de (ms) | bin bytes | bin ser/de (ms) | post bytes | post ser/de (ms)
+------------------------|-----------:|------------------|----------:|-----------------|-----------:|-----------------
+P1 command-batch-1000   |      74021 |  0.145 /  0.146 |     39386 |   0.021 /  0.017 |      13847 |  0.023 /  0.022
+P2 clip-snapshot-20000  |    2195717 |  4.136 /  5.144 |   1517938 |   0.886 /  0.930 |     580363 |  0.986 /  1.464
+P3 rgba-1MiB            |    4194305 |  5.592 / 10.481 |   1048584 |   2.356 /  2.351 |    1048579 |  2.432 /  2.103
 
-| payload | json bytes | json ser/de (ms) | bincode ser/de (ms) | postcard bytes | bincode bytes |
-|---|---|---|---|---|---|
-| 1 000-command batch | 51754 | 0.113 / 0.156 | 0.034 / 0.036 | 10760 | 36249 |
-  json/bincode size ratio: 1.43x
-| 20 000-clip snapshot | 2065688 | 3.900 / 4.773 | 0.724 / 0.931 | 529284 | 1388898 |
-  json/bincode size ratio: 1.49x
-| 1 MiB RGBA | 3745109 | 9.348 / 15.919 | 2.276 / 2.329 | 1048579 | 1048584 |
-  json blowup on byte payload: 3.57x; json/bincode ratio: 3.57x
+JSON byte-payload blowup: 4.00x (byte arrays become decimal lists)
+extrapolated 1080p RGBA JSON ser ≈ 44 ms/frame, de ≈ 83 ms/frame
+extrapolated 1080p60 one second (JSON) ≈ 2654 ms ser + 4974 ms de (one core)
+binary (bincode) same frame ≈ 18.6 ms ser + 18.6 ms de per frame — and the correct native path is no serialization at all (shared buffer/handle), making both JSON numbers pure waste
 
-extrapolation (linear in bytes from 1 MiB): 1080p RGBA frame ≈ 74 ms json ser (de 125 ms)
-  1080p60 one second ≈ 4454 ms ser + 7520 ms de (one core) — vs memcpy-scale on the binary path
-  (original-run cross-check: json ser 1 MiB was 10.67 ms; bincode path is memcpy-scale)
-  raw json ser 1 MiB this run: 9.347 ms
+verdict (expected, re-confirmed): JSON affordable for command/state scale, disqualified for frame payloads at both transport edges; frames-never-JSON rule stands (E-006 webview leg + this native leg).

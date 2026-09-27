@@ -1,0 +1,114 @@
+{
+    "frames": [
+        {
+            "key_frame": 1,
+            "pts": 0,
+            "pts_time": "0.000000",
+            "duration": 3000,
+            "duration_time": "0.033333",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "I"
+        },
+        {
+            "key_frame": 0,
+            "pts": 3000,
+            "pts_time": "0.033333",
+            "duration": 6000,
+            "duration_time": "0.066667",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "P"
+        },
+        {
+            "key_frame": 0,
+            "pts": 9000,
+            "pts_time": "0.100000",
+            "duration": 3000,
+            "duration_time": "0.033333",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "P"
+        },
+        {
+            "key_frame": 0,
+            "pts": 12000,
+            "pts_time": "0.133333",
+            "duration": 6000,
+            "duration_time": "0.066667",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "P"
+        },
+        {
+            "key_frame": 0,
+            "pts": 18000,
+            "pts_time": "0.200000",
+            "duration": 3000,
+            "duration_time": "0.033333",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "P"
+        },
+        {
+            "key_frame": 1,
+            "pts": 21000,
+            "pts_time": "0.233333",
+            "duration": 6000,
+            "duration_time": "0.066667",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "I"
+        },
+        {
+            "key_frame": 0,
+            "pts": 27000,
+            "pts_time": "0.300000",
+            "duration": 3000,
+            "duration_time": "0.033333",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "P"
+        },
+        {
+            "key_frame": 0,
+            "pts": 30000,
+            "pts_time": "0.333333",
+            "duration": 6000,
+            "duration_time": "0.066667",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "P"
+        },
+        {
+            "key_frame": 0,
+            "pts": 36000,
+            "pts_time": "0.400000",
+            "duration": 3000,
+            "duration_time": "0.033333",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "P"
+        },
+        {
+            "key_frame": 0,
+            "pts": 39000,
+            "pts_time": "0.433333",
+            "duration": 1000,
+            "duration_time": "0.011111",
+            "width": 160,
+            "height": 120,
+            "pix_fmt": "yuv420p",
+            "pict_type": "P"
+        }
+    ]
+}

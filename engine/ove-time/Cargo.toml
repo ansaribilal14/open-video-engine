@@ -5,4 +5,14 @@ edition = "2021"
 description = "Exact rational time primitives for the open-video-engine timeline (ADR-007)"
 license = "MIT OR Apache-2.0"
 
+# Zero dependencies by default. The optional serde feature exists for
+# crates that persist rationals (ove-media probe cache); it never pulls
+# anything into the engine core unless explicitly requested.
+[features]
+serde = ["dep:serde"]
+
 [dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
+serde_json = "1"

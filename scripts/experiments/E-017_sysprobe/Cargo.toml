@@ -1,0 +1,7 @@
+[package]
+name = "w2_sysprobe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ffmpeg-sys-next = { version = "7", features = ["build"] }
