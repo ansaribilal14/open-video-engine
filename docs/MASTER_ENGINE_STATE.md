@@ -6,7 +6,7 @@
 
 WAVE: 3 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode — all landed)
 DATE: 2026-09-29
-COMMIT: this wave landed via PR #5 (merge hash recorded in the merge commit)
+COMMIT: PR #5 merged as d0f1ce026b0bc78dccaf5a3197af096cd98f0d53 (main)
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
