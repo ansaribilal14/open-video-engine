@@ -4,9 +4,9 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 1 COMPLETE (0 audit / 0.5 SIGILL / 0.6 reconcile / 1 seam — all landed)
+WAVE: 2 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render — all landed)
 DATE: 2026-09-28
-COMMIT: this wave landed via PR #3 (merge hash recorded in the merge commit)
+COMMIT: this wave landed via PR #4 (merge hash recorded in the merge commit)
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
@@ -20,6 +20,31 @@ Prior session claims were re-verified from scratch before any new work:
 - Sources re-read: ove-time (297 l), ove-timeline (2303 l), ove-media (1332 l),
   ove-decode (145 l + conformance/probe suites). Spec set re-read: PROJECT_
   FORMAT / ENCODER / DECODER / FRAME_CONTRACT / MEDIA_ENGINE.
+
+## WAVE 2 deltas (this session)
+
+1. **ove-render created** (workspace member 5): software reference renderer
+   per RENDER_GRAPH_SPEC — plan.rs (RenderPlan/Pass/PassKind + canonical
+   hash), compile.rs (PURE compiler: compile_frame/compile_span; layer order
+   = track order; exact rationals; conservative culling), exec.rs (software
+   executor: integer straight-alpha over opaque output, FrameSource D-5
+   floor resolution, single color conversion).
+2. **RG-1..RG-7 all green** (render_golden.rs): compile purity (runs +
+   threads, 4 seeds × 3 tracks × 5 placements), golden frames (3 fixtures,
+   blake3-committed, hand-verified pixel semantics asserted alongside),
+   layer-order swap, retime 0.5×/2× exact frame prediction (through the
+   ADR-013 seam), split continuity END-TO-END through the real Timeline
+   (apply Split → walk → compile → render byte-equality across the seam),
+   optimizer safety (cullable placements: no passes + byte-identical
+   output), color-tag single conversion + TagMismatch honesty error.
+3. **ADR-014** records the v1 decisions (opaque integer compositing,
+   output-sized surfaces, declared-tag conversion, integer-translate
+   geometry, FrameSource decoupling, per-frame compile shape) + reopen
+   conditions. Key bug the goldens caught during development: opaque
+   transform buffers → fixed to transparent-outside-region.
+4. ENGINE_BUILD_PLAN waves 0–3 are now REAL crates; the directive's W2
+   "software-first renderer" gate is satisfied; decode binding to the same
+   FrameSource trait lands with the W6 vertical slice.
 
 ## WAVE 1 deltas (this session)
 
@@ -82,21 +107,22 @@ Prior session claims were re-verified from scratch before any new work:
 | ove-timeline | TESTED — 10 properties (AVL primary, ADR-011) + 7 seam properties (S0–S6, ADR-013) | CI + local; bench in ADR-011 |
 | ove-media | TESTED — 13 unit (asset hash, FrameEnvelope, pool, probe types) | CI + local |
 | ove-decode | TESTED — 14 conformance (D-1..D-12) + 6 probe; libav confined | CI + local, both system and bundled libav |
-| ove-render / ove-encode / ove-project / ove-engine / ove-cli | PLANNED (waves 2–5 per ENGINE_BUILD_PLAN) | — |
+| ove-render | TESTED — RG-1..RG-7 (purity, goldens, layer order, retime, split continuity, optimizer safety, color) | 84/84 local (2026-09-28) + CI; ADR-014 |
+| ove-encode / ove-project / ove-engine / ove-cli | PLANNED (waves 3–5 per ENGINE_BUILD_PLAN) | — |
 
 ## Current research / architecture status
 
-- ADR-001/002/007/008/009/010/011/012/013 ACCEPTED; ADR-003/004/005/006 PROPOSED
-  with named evidence legs. ADR-007 carries the 2026-09-28 overflow-policy
-  amendment; ADR-013 records the seam contract + dead-leg removal.
+- ADR-001/002/007/008/009/010/011/012/013/014 ACCEPTED; ADR-003/004/005/006
+  PROPOSED with named evidence legs. ADR-007: overflow policy; ADR-013: seam
+  + dead-leg removal; ADR-014: software renderer v1.
 - 45 research docs + 137-source ledger + gates (13 UNDERSTOOD / 1 PARTIAL env-bound).
 - Architecture residuals (named, not hidden): E-005 real-GPU perf, E-004c device
   runtime, E-006b real-Tauri transport — all hardware/environment-bound.
 
 ## Current validation status
 
-- 77/77 workspace tests GREEN locally (system FFmpeg 7.1.5 path), fmt GREEN,
-  clippy -D warnings GREEN, after W1 changes (2026-09-28).
+- 84/84 workspace tests GREEN locally (system FFmpeg 7.1.5 path), fmt GREEN,
+  clippy -D warnings GREEN, after W2 changes (2026-09-28).
 - Bundled path: exercised by CI on the PR for this wave (same pure-Rust diff —
   no libav interaction; PR run is the gate).
 - CI: post-merge main runs ALL GREEN — 36391223192 (W0.6 merge 9383d14),
@@ -114,7 +140,7 @@ Prior session claims were re-verified from scratch before any new work:
 
 ## Current open gaps (top)
 
-1. WAVE 2 ove-render (software reference first — directive §11; BUILD_PLAN W3).
+1. WAVE 3 ove-encode + mux + ExportPlanner (BUILD_PLAN W4; ffprobe-verified goldens).
 2. Mutation-style "test the tests" not yet systematic.
 3. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
 4. GitHub PAT used across chat sessions must be rotated by the owner
@@ -124,7 +150,7 @@ Prior session claims were re-verified from scratch before any new work:
 
 ## Current wave order (directive §37, unchanged)
 
-0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render →
+0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
 3 encode+mux+export → 4 project → 5 engine+cli → 6 vertical slice →
 7 audio → 8 keyframes → 9 GPU → 10–12 platforms → 13 conformance →
 14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
@@ -148,6 +174,11 @@ Prior session claims were re-verified from scratch before any new work:
   (provenance ee31fb9). Confidence 0.88. Reopen: retime-verb semantics
   contradict S1; a backend cannot honor D-5 landing; ove-project needs
   persisted resolved-command journals.
+- ADR-014 (2026-09-28): software reference renderer v1 — opaque integer
+  straight-alpha compositing, output-sized surfaces, declared-tag single
+  conversion, integer-translate geometry, FrameSource decoupling from
+  ove-decode. Confidence 0.9. Reopen: intentional golden diff without
+  byte-level note; scaling/affine need; stacked partial-coverage banding.
 
 ## Unresolved decisions (registry)
 
@@ -157,9 +188,10 @@ Prior session claims were re-verified from scratch before any new work:
 
 ## Explicit next action
 
-WAVE 2 — ove-render software reference renderer (BUILD_PLAN W3; directive §11
-"software-first, GPU is only a backend"): RenderPlan compiler as a pure
-function from timeline state → ordered pass list; CPU RGBA raster path;
-golden-frame tests (RG-1..RG-7 per RENDER_GRAPH_SPEC); compile-purity property
-(random timelines → valid passes). Land via PR with fmt/clippy/tests green,
-update this file, then WAVE 3 (encode+mux+ExportPlanner).
+WAVE 3 — ove-encode + muxer + ExportPlanner (BUILD_PLAN W4): Encoder trait
+(configure/feed/drain) + Muxer + stream-copy route chosen by the export
+planner (keyframe-aligned per E-007/E-007b); MP4 via FFmpeg LGPL inside an
+adapter crate (libav confinement holds); ffprobe-verified outputs — duration
+exactness (frame-exact), timestamps, codec tags; golden hashes committed.
+Land via PR with fmt/clippy/tests green, update this file, then WAVE 4
+(ove-project persistence: manifest + commands.jsonl + snapshot compaction).
