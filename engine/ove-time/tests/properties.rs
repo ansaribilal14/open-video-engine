@@ -247,3 +247,99 @@ fn p10_large_magnitude_exact() {
         assert_eq!(lhs, rhs, "large-magnitude exactness: {a} + {b} = {s}");
     }
 }
+
+/// P11: i64::MIN / i64::MAX boundary contract (takeover audit §10 #1/#2,
+/// ADR-007 amendment 2026-09-28). Extremes must be SAFE everywhere except
+/// where the value is mathematically unrepresentable (negation of i64::MIN).
+#[test]
+fn p11_extreme_boundary_safety() {
+    // construction normalizes i64::MIN without abs/gcd overflow:
+    // gcd(|MIN|, 2) = 2  =>  (-2^62, 1)
+    let m2 = Rational::new(i64::MIN, 2);
+    assert_eq!((m2.num(), m2.den()), (-4_611_686_018_427_387_904, 1));
+    // gcd(|MIN|, 1) = 1 => stored as-is
+    let m = Rational::new(i64::MIN, 1);
+    assert_eq!((m.num(), m.den()), (i64::MIN, 1));
+    // order: MIN < 0 < MAX, cross-multiplied in i128 (no wrap misordering)
+    assert_eq!(m.cmp(&Rational::zero(1)), std::cmp::Ordering::Less);
+    assert_eq!(
+        Rational::new(i64::MAX, 1).cmp(&m),
+        std::cmp::Ordering::Greater
+    );
+    // half: arithmetic shift floors exactly; MIN halves to -2^62 (no overflow)
+    assert_eq!(m.half(), Rational::new(-4_611_686_018_427_387_904, 1));
+    let odd = Rational::new(-5, 3);
+    assert_eq!(
+        odd.half(),
+        Rational::new(-3, 3),
+        "floor semantics on negatives"
+    );
+    // floor_div_rate at an extreme stays exact while the RESULT fits i64:
+    // MIN/1024 s = -2^53 s; floor(-2^53 × 30fps) = -2^53×30 (i128-exact)
+    let tiny = Rational::new(i64::MIN, 1024); // normalizes to (-2^53, 1)
+    assert_eq!(
+        tiny.floor_div_rate(30, 1),
+        -270_215_977_642_229_760, // (-2^53)*30, exact, fits i64
+    );
+    // split invariant holds at the extreme: half + remainder == original
+    let h = m.half();
+    assert_eq!(h.add(m.sub(h)), m);
+    // add on opposite extremes is exact: MAX + MIN == -1
+    assert_eq!(Rational::new(i64::MAX, 1).add(m), Rational::new(-1, 1));
+    // serde roundtrip of a normalized extreme (feature serde)
+    #[cfg(feature = "serde")]
+    {
+        let s = serde_json::to_string(&m2).unwrap();
+        let back: Rational = serde_json::from_str(&s).unwrap();
+        assert_eq!(back, m2, "extreme roundtrip via serde");
+    }
+}
+
+/// P12: overflow is a CONTRACT VIOLATION — it must PANIC (fail-fast), never
+/// wrap or saturate (ADR-007 amendment 2026-09-28; p3b depends on the same
+/// contract). Each case below is mathematically unrepresentable in i64.
+#[test]
+#[should_panic(expected = "negation overflow")]
+fn p12_neg_of_i64_min_panics() {
+    let _ = Rational::new(i64::MIN, 1).neg();
+}
+
+#[test]
+#[should_panic(expected = "negation overflow")]
+fn p12_sub_via_neg_of_i64_min_panics() {
+    // a - MIN would need MIN.neg(), which is unrepresentable
+    let _ = Rational::new(1, 1).sub(Rational::new(i64::MIN, 1));
+}
+
+#[test]
+#[should_panic(expected = "result numerator exceeds i64")]
+fn p12_add_overflow_panics() {
+    let _ = Rational::new(i64::MAX, 1).add(Rational::new(1, 1));
+}
+
+#[test]
+#[should_panic(expected = "result numerator exceeds i64")]
+fn p12_mul_overflow_panics() {
+    // 5 * (i64::MAX/3) does not divide down into i64 range (gcd is 1: MAX odd,
+    // MAX ≡ 1 (mod 3) => numerator 5*MAX unrepresentable)
+    let _ = Rational::new(i64::MAX, 3).mul(Rational::new(5, 1));
+}
+
+#[test]
+#[should_panic(expected = "frame index exceeds i64")]
+fn p12_floor_div_rate_overflow_panics() {
+    // floor(MIN s × 30) = MIN*30 ≈ -2.77e20 — unrepresentable in i64:
+    // fail-fast, never saturate (ADR-007 amendment 2026-09-28)
+    let _ = Rational::new(i64::MIN, 1).floor_div_rate(30, 1);
+}
+
+#[test]
+fn p12_exact_boundary_that_must_not_panic() {
+    // guard against overzealous panics: results that DO fit must succeed
+    // MAX*4/4 == MAX exactly (gcd removes the factor before the i64 check)
+    let r = Rational::new(i64::MAX, 1).mul(Rational::new(4, 4));
+    assert_eq!(r, Rational::new(i64::MAX, 1));
+    // MAX + MIN == 0 (P11 also covers); MAX * 1 stays put
+    let r2 = Rational::new(i64::MAX, 7).mul(Rational::new(7, 1));
+    assert_eq!(r2, Rational::new(i64::MAX, 1));
+}

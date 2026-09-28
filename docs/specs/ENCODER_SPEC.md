@@ -62,7 +62,7 @@ pub enum ExportRoute {
 | E-2 | Duration exactness: container duration == project render span ± 0 frames (video), ± 0 samples (audio) |
 | E-3 | Timestamp monotonicity + start offsets per track (edit lists / negative-pts policy documented) |
 | E-4 | Codec parameters round-trip: profile/level/colour tags as configured |
-| E-5 | Golden hashes: committed tiny outputs (8s/24fps + 29.97 + VFR + audio) with sha256 + ffprobe JSON dumps |
+| E-5 | Golden hashes: committed tiny outputs (8s/24fps + 29.97 + VFR + audio) with sha256 + ffprobe JSON dumps. NOTE: sha256 here is TEST-ARTIFACT INTEGRITY ONLY (sha256sum tooling on golden files); engine identity hashing is BLAKE3 — see PROJECT_FORMAT_SPEC §2 hash policy |
 | E-6 | Kill-resume: kill during export → checkpoint file → resume → final output == no-kill output (hash) — **v1 at segment granularity** |
 | E-7 | Mixed route: smart-render segmentation on a 3-clip timeline produces exact expected segment boundaries (E-007b 6.8–11.9× economics as perf smoke, separate from correctness) |
 
@@ -71,7 +71,9 @@ pub enum ExportRoute {
 - MP4 (v1): faststart option, per-track timescales chosen to keep rationals exact
   (video: rate num/den; audio: sample rate) — no fp anywhere; edit-list policy explicit.
 - `finalize()` reports {duration, track tables, sha256} — these feed E-2/E-5 and the
-  project-format render records.
+  project-format render records. (sha256 in render records = output-artifact
+  integrity fingerprint; it is metadata ABOUT the render, not asset identity,
+  which stays BLAKE3 — PROJECT_FORMAT_SPEC §2 hash policy.)
 - WebM/mkv + browser muxers (mediabunny) are adapter-stage, not v1 core.
 
 ## 6. Capability honesty

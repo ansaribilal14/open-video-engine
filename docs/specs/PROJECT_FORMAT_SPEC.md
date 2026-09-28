@@ -33,8 +33,9 @@ my-project.ove/
   "tick_axis": { "rate_num": 48000, "rate_den": 1 },
   "created_by": { "engine": "ove", "version": "0.1.0" },
   "state": { "snapshot_seq": 12, "log_len": 340, "state_hash": "blake3:…" },
-  "assets": [ { "id": "a-1", "sha256": "…", "path": "assets/<sha>/src.mp4",
-                "probe": "assets/<sha>/probe.json" } ],
+  "assets": [ { "id": "a-1", "content_hash": "<64 lowercase hex>",
+                "path": "assets/<content-hash>/src.mp4",
+                "probe": "assets/<content-hash>/probe.json" } ],
   "uuid": "…"
 }
 ```
@@ -44,6 +45,12 @@ my-project.ove/
   happens on the axis.
 - `state_hash` is the canonical hash of the folded state (same canonicalization as
   receipts) — it is what the acceptance suite compares.
+- HASH POLICY (single algorithm, normative): asset identity AND state hashing use
+  **BLAKE3-256** rendered as 64 lowercase hex chars — exactly what `ove-media`
+  `ContentHash` produces (serde: bare hex string). No other hash algorithm
+  participates in identity anywhere in this format. (sha256 may appear in TEST
+  tooling for golden-artifact integrity only — see ENCODER_SPEC E-5 — never in
+  project files.)
 
 ## 3. commands.jsonl (the log)
 
@@ -70,7 +77,9 @@ my-project.ove/
 
 ## 5. Asset pipeline
 
-1. Import = copy into `assets/<sha256>/` (dedupe by hash) + run probe → probe.json.
+1. Import = copy into `assets/<content-hash>/` (dedupe by hash) + run probe → probe.json.
+   The content hash is BLAKE3-256 (see §2 hash policy) — the SAME hash that
+   `ove-media AssetRef::from_path` computes; the asset IS the cache key.
 2. Probe record includes: container, streams {codec, profile, rate rationals, duration,
    color tags}, keyframe index (pts list), VFR flag — everything DECODER_SPEC §2 needs.
 3. Missing asset on open: project loads with typed `AssetMissing` markers (state intact,

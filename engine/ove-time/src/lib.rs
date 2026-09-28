@@ -6,16 +6,25 @@
 //! Rules encoded here (do not weaken):
 //!   * Time values are exact rationals: i64 numerator / i64 denominator.
 //!   * Denominator is always > 0; values are stored normalized (gcd == 1).
-//!   * Arithmetic uses i128 intermediates and saturates on overflow rather
-//!     than wrapping silently.
+//!   * Arithmetic uses i128 intermediates. Overflow is a CONTRACT VIOLATION:
+//!     it PANICS (fail-fast) — it never wraps and never saturates. Saturation
+//!     would silently approximate, which is fatal to the exact-time mission
+//!     (E-002); the fixed-tick-axis discipline (ADR-007 refinement, test
+//!     p3b) keeps overflow unreachable for legitimate aggregates, so any
+//!     overflow is a caller bug and must be loud. Property tests P11/P12
+//!     pin this contract (ADR-007 amendment 2026-09-28).
+//!   * i64::MIN is safe at construction/normalization/cmp/half/floor_div_rate
+//!     (gcd uses unsigned magnitudes; cross-multiplication is i128), but has
+//!     NO representable negation: `neg()` panics on it by the same contract.
 //!   * Floating point is NEVER accepted as input for authoritative time.
 //!     (from_f64_seconds exists ONLY for interop with legacy fp sources and
 //!     quantizes to the nearest tick of the given rate — display/legacy use.)
 
-// Inherent `add`/`sub`/`mul`/`neg` are deliberate: they carry documented
-// saturate-on-overflow semantics specific to the fixed tick axis (ADR-007),
-// which we do not want silently conflated with std::ops semantics at call
-// sites. Trait impls may arrive with the timeline crate after an API review.
+// Inherent `add`/`sub`/`mul`/`neg` are deliberate: they carry the documented
+// fail-fast (panic-on-overflow) contract specific to the fixed tick axis
+// (ADR-007), which we do not want silently conflated with std::ops semantics
+// at call sites. Trait impls may arrive with the timeline crate after an API
+// review.
 #![allow(clippy::should_implement_trait)]
 
 use std::cmp::Ordering;
@@ -28,24 +37,27 @@ pub struct Rational {
     den: i64,
 }
 
+// gcd is computed on UNSIGNED magnitudes: `.abs()` on i64::MIN/i128::MIN
+// would overflow (debug panic, release wrap) and corrupt normalization.
 fn gcd64(a: i64, b: i64) -> i64 {
-    let (mut a, mut b) = (a.abs(), b.abs());
+    let (mut a, mut b) = (a.unsigned_abs(), b.unsigned_abs());
     while b != 0 {
         let t = a % b;
         a = b;
         b = t;
     }
-    a
+    a as i64 // fits: gcd of two i64 magnitudes is <= i64::MAX+1 range, and
+             // any result here divides a den > 0, so it is representable
 }
 
 fn gcd128(a: i128, b: i128) -> i128 {
-    let (mut a, mut b) = (a.abs(), b.abs());
+    let (mut a, mut b) = (a.unsigned_abs(), b.unsigned_abs());
     while b != 0 {
         let t = a % b;
         a = b;
         b = t;
     }
-    a
+    a as i128
 }
 
 impl Rational {
@@ -98,11 +110,15 @@ impl Rational {
         )
     }
 
-    /// Exact negation.
+    /// Exact negation. Panics on `i64::MIN` (no representable negation) —
+    /// fail-fast contract, never wraps (ADR-007 amendment 2026-09-28).
     #[allow(clippy::should_implement_trait)]
     pub fn neg(self) -> Self {
         Rational {
-            num: -self.num,
+            num: self
+                .num
+                .checked_neg()
+                .expect("negation overflow: i64::MIN has no representable negation"),
             den: self.den,
         }
     }
