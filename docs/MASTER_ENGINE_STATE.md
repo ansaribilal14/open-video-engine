@@ -33,6 +33,28 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 - Source inventory re-counted: 4,223 l (ove-time 378, ove-timeline 1,611,
   ove-media 1,332, ove-decode 145+suites, ove-render 643).
 
+## Session verification record (2026-09-29, fresh continuation #3)
+
+All W0–W6 claims re-verified from scratch before Wave 7 work:
+
+- HEAD `451e67e` on main; takeover baseline `33fde9d` IS an ancestor
+  (30 commits since); tree clean; fix/ci-bundled-ffmpeg-sigill branch fully
+  merged (zero unmerged commits).
+- GitHub Actions run 36472738518 on exact HEAD `451e67e`: SUCCESS (push,
+  main, all 3 jobs). Runs 24–31 all SUCCESS; last PR run (wave-6 branch)
+  SUCCESS.
+- Local (system FFmpeg 7.1.5 path, unprivileged recipe per DEV_ENV.md,
+  rustc 1.98.1): 132/132 tests GREEN · fmt GREEN · clippy (workspace,
+  all targets) GREEN · libav-confinement check PASS.
+- W6 milestone test confirmed present and passing
+  (ove-engine/tests/integration.rs::w6_vertical_slice_milestone).
+- Bundled-feature path + cargo-audit verified via CI on the exact SHA
+  (run 36472738518) rather than a local bundled rebuild; confidence 0.85
+  for that split, 1.0 for everything above.
+- Doc drift found & fixed in this commit: open-gaps list still claimed
+  VERTICAL_SLICE_TRACE.md "not yet written" after W6 landed it (stale
+  gap #6 removed).
+
 ## WAVE 6 deltas (2026-09-29, PR #8)
 
 1. **The directive W6 milestone is REAL and tested**
@@ -276,6 +298,8 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 - Workflow: fmt + clippy + tests (bundled) + portability guard + cargo-audit
   + libav-confinement. Cache prefix `v2-portable-ffmpeg` (poisoned caches
   unreachable).
+- Latest confirmation: run 36472738518 on HEAD `451e67e` SUCCESS
+  (2026-09-28T19:30Z). All of runs 24–31 SUCCESS.
 
 ## Current blockers
 
@@ -291,8 +315,6 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 4. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
 5. GitHub PAT used across chat sessions must be rotated by the owner
    (standing security rule, DEV_ENV.md) — outside engine scope, flagged.
-6. docs/VERTICAL_SLICE_TRACE.md (directive deliverable) not yet written —
-   scheduled with W6 vertical slice when the chains exist end-to-end.
 
 ## Current wave order (directive §37, unchanged)
 
