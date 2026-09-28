@@ -319,6 +319,38 @@ impl Timeline {
         self.used_ids.contains(&id)
     }
 
+    /// The id-allocation cursor (next candidate). STATE, not cache (E-012):
+    /// replay determinism requires `next_id` + `used_ids` to survive
+    /// save/reload, so the project layer serializes them (ADR-016). Read-only.
+    pub fn next_id_value(&self) -> ClipId {
+        self.next_id
+    }
+
+    /// Every id ever inserted and not currently removed — plus removed ones
+    /// stay in the set? NO: `used_ids` holds ids of LIVE clips only (insert
+    /// adds, remove keeps the id marked used — see `Remove` handling below).
+    /// Exposed for exact state serialization (ADR-016); iteration order is
+    /// unordered — the project layer sorts for canonical hashing.
+    pub fn used_ids(&self) -> impl Iterator<Item = ClipId> + '_ {
+        self.used_ids.iter().copied()
+    }
+
+    /// Exact state reconstruction from serialized parts (the project
+    /// layer's snapshot loader, ADR-016). No validation beyond construction:
+    /// the loader validates its own invariants (every live clip id ∈
+    /// `used_ids`, exact clip order) before calling.
+    pub fn from_parts(
+        tracks: BTreeMap<TrackId, TrackKind>,
+        next_id: ClipId,
+        used_ids: std::collections::HashSet<ClipId>,
+    ) -> Self {
+        Timeline {
+            tracks,
+            next_id,
+            used_ids,
+        }
+    }
+
     /// Apply a command; returns its exact inverse computed from pre-state.
     /// On any error the timeline is unchanged (validated before mutation;
     /// Batch rolls back via already-collected inverses).
