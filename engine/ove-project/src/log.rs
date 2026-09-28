@@ -37,6 +37,12 @@ pub enum LogPayload {
         track: u64,
         index: usize,
         clip: crate::state::MirrorClip,
+        /// Per-clip asset binding (W6 vertical slice): the content hash of
+        /// the media this clip consumes. Optional (v0.1 logs and asset-free
+        /// clips). Recorded at the project layer — ove-timeline clips stay
+        /// time-only (ADR-013 seam: the binding is media, not time).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asset: Option<String>,
     },
     Remove {
         track: u64,
@@ -86,6 +92,7 @@ impl LogPayload {
                     duration: NumPair::of(clip.duration),
                     source_in: NumPair::of(clip.source_in),
                 },
+                asset: None,
             },
             Command::Remove { track, id } => LogPayload::Remove {
                 track: *track,
@@ -130,7 +137,9 @@ impl LogPayload {
 
     pub fn to_command(&self) -> Result<Command, String> {
         Ok(match self {
-            LogPayload::Insert { track, index, clip } => Command::Insert {
+            LogPayload::Insert {
+                track, index, clip, ..
+            } => Command::Insert {
                 track: *track,
                 index: *index,
                 clip: ove_timeline::Clip::new(
