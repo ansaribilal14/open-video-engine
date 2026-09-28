@@ -4,9 +4,9 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 3 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode — all landed)
+WAVE: 4 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project — all landed)
 DATE: 2026-09-29
-COMMIT: PR #5 merged as d0f1ce026b0bc78dccaf5a3197af096cd98f0d53 (main)
+COMMIT: W3 = PR #5 merged as d0f1ce0; W4 = this wave's PR (hash at merge)
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
@@ -32,6 +32,35 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
   1.98.1): 84/84 tests GREEN · fmt GREEN · clippy -D warnings GREEN.
 - Source inventory re-counted: 4,223 l (ove-time 378, ove-timeline 1,611,
   ove-media 1,332, ove-decode 145+suites, ove-render 643).
+
+## WAVE 4 deltas (2026-09-29, PR #6)
+
+1. **ove-project created** (workspace member 7): PROJECT_FORMAT_SPEC v1 —
+   manifest.json (identity + assets + track registry), commands.jsonl
+   (append-only, write-through with flush-per-entry: the on-disk state
+   after each execute IS the kill-9 state), snapshot/ (state-<seq>.json +
+   meta.json authority, atomic temp+rename everywhere). Folds through
+   ove-timeline commands with explicit ids (E-012 discipline carried:
+   next_id + used_ids serialized as document state — new read-only
+   accessors + from_parts on Timeline).
+2. **Acceptance P-1..P-8 green (11 tests; workspace 123/123)** including:
+   P-2a REAL subprocess kill-9 (re-exec child mode + abort, replay ==
+   live hash), P-3 compaction equivalence + continuation, P-4 corruption
+   drill (typed hard-stop error → explicit quarantine repair → last-good
+   hash exact), P-5 float rejection + exact (num,den) round-trip, P-6
+   hash-addressed assets (folder move survives; corrupt/missing typed,
+   state intact), P-7 undo-marker replay (undo history rebuilt from the
+   log per ADR-008), P-8 disposable dirs.
+3. **ADR-016** records: authority order (log = record, snapshot meta =
+   snapshot authority, manifest = reconciled hint), log grammar (embedded
+   inverses on markers → self-contained suffixes; anchored seq contiguity;
+   timestamps omitted in v1), track registry in the manifest (tracks are
+   setup, not commands), canonical BLAKE3 state hash over the document
+   mirror, the repair path, the kill-9/fsync honesty boundary.
+4. **Design honesty note**: reopening restores undo history ONLY from the
+   replayed suffix (ADR-008 forbids persisting the stack) — P-3/P-7 assert
+   exactly this model; pre-snapshot undo steps are not undoable after a
+   reopen, which is the recorded v1 semantics.
 
 ## WAVE 3 deltas (2026-09-29, PR #5)
 
@@ -157,7 +186,8 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 | ove-decode | TESTED — 14 conformance (D-1..D-12) + 6 probe; libav confined | CI + local, both system and bundled libav |
 | ove-render | TESTED — RG-1..RG-7 (purity, goldens, layer order, retime, split continuity, optimizer safety, color) | CI + local; ADR-014 |
 | ove-encode | TESTED — P01–P10 planner + E-1..E-5/E-7/H1–H5 conformance (28 tests; ffprobe/libav/pixel-verified, goldens committed) | 112/112 workspace local (2026-09-29); ADR-015 |
-| ove-project / ove-engine / ove-cli | PLANNED (waves 4–5 per ENGINE_BUILD_PLAN) | — |
+| ove-project | TESTED — P-1..P-8 acceptance (11 tests incl. subprocess kill-9, compaction equivalence, corruption drill) | 123/123 workspace local (2026-09-29); ADR-016 |
+| ove-engine / ove-cli | PLANNED (wave 5 per ENGINE_BUILD_PLAN) | — |
 
 ## Current research / architecture status
 
@@ -172,8 +202,8 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Current validation status
 
-- 112/112 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
-  1.98.1), fmt GREEN, clippy -D warnings GREEN, after W3 (2026-09-29).
+- 123/123 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
+  1.98.1), fmt GREEN, clippy -D warnings GREEN, after W4 (2026-09-29).
 - Bundled path: exercised by CI on this wave's PR (bundled libav now also
   links swscale via the union feature set; portability guard scans the
   same object tree; E-5 byte gate self-skips with an explicit report on a
@@ -194,8 +224,10 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Current open gaps (top)
 
-1. WAVE 4 ove-project persistence (manifest + commands.jsonl + snapshot
-   compaction), then W5 ove-engine + ove-cli.
+1. WAVE 5 ove-engine + ove-cli (integration slice: build project: 1 video
+   + 1 audio, multi-clip, trim/split/move/undo/redo/save/kill/reopen →
+   decode → render → export; MEDIA+TIMELINE+PROJECT+RENDER+EXPORT
+   cooperating), then W6 vertical slice + VERTICAL_SLICE_TRACE.md.
 2. AAC seam re-encode (audio wave W7); OpenH264/SVT-AV1 encoder legs;
    E-6 kill-resume execution at segment granularity (checkpoint fields
    exist).
@@ -209,7 +241,7 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 ## Current wave order (directive §37, unchanged)
 
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
-3 encode+mux+export ✓ → 4 project → 5 engine+cli → 6 vertical slice →
+3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli → 6 vertical slice →
 7 audio → 8 keyframes → 9 GPU → 10–12 platforms → 13 conformance →
 14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
 19 perf → 20 docs/release → 21 production audit.
@@ -246,6 +278,13 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
   timescales still passes (conversion is effective-axis based); an
   encoder that needs B-frames forces the dts/ctts conversation; openh264
   licensing form (external lib vs bundled) at its adapter leg.
+- ADR-016 (2026-09-29): project persistence v1 — authority order (log >
+  snapshot meta > manifest hint), write-through kill-9 model, log grammar
+  with embedded inverses + anchored contiguity, track registry in the
+  manifest, BLAKE3 document hash, explicit repair path, id-state as
+  document state (E-012). Confidence 0.9. Reopen: a second schema version
+  (migration serializers + fixtures); a requirement for fsync-grade
+  durability claims; track-structure commands at the W8 era.
 
 ## Unresolved decisions (registry)
 
@@ -255,10 +294,11 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Explicit next action
 
-WAVE 4 — ove-project persistence (BUILD_PLAN W5): manifest.json
-(schema_version, tick axis, asset registry keyed by BLAKE3 content hash) +
-commands.jsonl (append-only command journal) + snapshot compaction; folds
-through ove-timeline commands (explicit IDs, exact inverses, state hash).
-Acceptance: save → kill -9 → reopen → replay → state hash == pre-kill hash.
-Land via PR with fmt/clippy/tests green, update this file, then WAVE 5
-(ove-engine + ove-cli integration slice).
+WAVE 5 — ove-engine + ove-cli (BUILD_PLAN W5 integration slice): the
+engine session wires probe → asset import → timeline commands → project
+save/load → decode → render → export; headless CLI `ove-cli` drives it
+(1 video + 1 audio, multi-clip, trim/split/move/undo/redo/save/kill/
+reopen). Gate: MEDIA+TIMELINE+PROJECT+RENDER+EXPORT cooperating with the
+directive's save/kill-9/reopen/state-hash test end-to-end. Land via PR
+with fmt/clippy/tests green, update this file, then WAVE 6 (full vertical
+slice + docs/VERTICAL_SLICE_TRACE.md).

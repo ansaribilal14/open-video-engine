@@ -3,6 +3,15 @@
 > Parent: ADR-008 + E-003 + E-009 + doc 19/31/33. The format is a folder; the acceptance
 > gate is save/kill/reopen/replay hash-equality. Single-writer v1 (concurrency explicitly
 > out of scope).
+>
+> **Implemented (2026-09-29, ADR-016)**: `ove-project` — §1 layout, §3 log
+> (grammar refined: embedded inverses on undo/redo markers, anchored seq
+> contiguity, timestamps omitted in v1), §4 snapshot protocol (meta.json is
+> the snapshot authority; manifest is a reconciled hint), §5 asset pipeline
+> (hash-addressed; probe sidecars supplied by an adapter layer — core crate
+> stays libav-free), §7 P-1..P-8 green incl. a real subprocess kill-9 drill.
+> Additions to the §2 sketch: `tracks` registry (track structure is project
+> setup, not a command — ADR-016 §4).
 
 ## 1. On-disk layout
 
