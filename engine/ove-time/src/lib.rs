@@ -182,9 +182,43 @@ impl Rational {
         )
     }
 
+    /// Exact reciprocal (`1/self`). Panics on zero numerator (division by
+    /// zero) and on `i64::MIN` numerator (its negation is unrepresentable —
+    /// fail-fast contract, ADR-007 amendment 2026-09-28).
+    pub fn recip(self) -> Self {
+        assert!(self.num != 0, "reciprocal of zero");
+        if self.num > 0 {
+            Rational {
+                num: self.den,
+                den: self.num,
+            }
+        } else {
+            // negative: flip both signs so den > 0; num != i64::MIN asserted
+            // by checked_neg (panic on MIN per contract)
+            Rational {
+                num: self
+                    .den
+                    .checked_neg()
+                    .expect("negation overflow: i64::MIN has no representable negation"),
+                den: self
+                    .num
+                    .checked_neg()
+                    .expect("negation overflow: i64::MIN has no representable negation"),
+            }
+        }
+    }
+
     /// Ticks at the given rate (exact integer): floor(value * rate).
     pub fn ticks_at(self, rate_num: i64, rate_den: i64) -> i64 {
         self.floor_div_rate(rate_num, rate_den)
+    }
+
+    /// Exact ceiling to an integer frame index at the given frame rate —
+    /// `ceil(value × rate)` computed as `-floor(-value × rate)` (both i128).
+    /// Panics by contract if the result exceeds i64 (see floor_div_rate).
+    pub fn ceil_div_rate(self, rate_num: i64, rate_den: i64) -> i64 {
+        let neg_floor = self.neg().floor_div_rate(rate_num, rate_den);
+        neg_floor.checked_neg().expect("frame index exceeds i64")
     }
 }
 
@@ -266,6 +300,37 @@ mod unit {
         let d = Rational::new(1001, 24000); // odd numerator
         let h = d.half();
         assert_eq!(h.add(d.sub(h)), d); // left + right == original
+    }
+
+    #[test]
+    fn recip_exact_and_signed() {
+        assert_eq!(Rational::new(2, 5).recip(), Rational::new(5, 2));
+        assert_eq!(Rational::new(-2, 5).recip(), Rational::new(-5, 2));
+        assert_eq!(Rational::new(3, 1).recip(), Rational::new(1, 3));
+        // r * recip(r) == 1 for r != 0 (property-checked further in P13)
+        let r = Rational::new(1001, 24000);
+        assert_eq!(r.mul(r.recip()), Rational::new(1, 1));
+    }
+
+    #[test]
+    fn ceil_matches_floor_at_boundaries() {
+        // exact boundary: ceil == value itself, floor == value itself
+        assert_eq!(Rational::new(1, 1).ceil_div_rate(30, 1), 30);
+        assert_eq!(Rational::new(1, 1).floor_div_rate(30, 1), 30);
+        // one tick above 30 frames: ceil 31, floor 30
+        assert_eq!(Rational::new(30_001, 30_000).ceil_div_rate(30, 1), 31);
+        assert_eq!(Rational::new(30_001, 30_000).floor_div_rate(30, 1), 30);
+        // negatives: ceil(-0.5 frames) = 0, floor = -1
+        assert_eq!(Rational::new(-1, 60).ceil_div_rate(30, 1), 0);
+        assert_eq!(Rational::new(-1, 60).floor_div_rate(30, 1), -1);
+        // zero
+        assert_eq!(Rational::zero(24000).ceil_div_rate(30, 1), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "reciprocal of zero")]
+    fn recip_zero_panics() {
+        let _ = Rational::zero(24000).recip();
     }
 }
 
