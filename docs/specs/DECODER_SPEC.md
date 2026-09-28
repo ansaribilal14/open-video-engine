@@ -3,6 +3,13 @@
 > Directive: decoder is the first thing to implement. This spec fixes the trait, the
 > semantics, and the conformance suite that decides whether an implementation is real.
 > Parent: ADR-004 (as amended by ARCHITECTURE_AUDIT #1); frame type: FRAME_CONTRACT.
+>
+> **Audio implemented (2026-09-29, WAVE 7 / ADR-018)**: audio streams decode
+> through the same session machine (Exact/Snap) with the canonical
+> planar-f32 surface at the source rate/layout (format conversion only —
+> never a resample), per-frame duration = nb_samples/rate exact, and the
+> audio floor+trim seek policy (straddling frame delivered whole; caller
+> trims). Conformance: A-1..A-4 (tests/audio_conformance.rs).
 
 ## 1. Trait (session state machine — not a bag of methods)
 

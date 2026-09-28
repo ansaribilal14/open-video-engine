@@ -4,9 +4,9 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 6 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice — all landed)
+WAVE: 7 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8 (merge hash in the merge commit)
+COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = audio leg (this wave's merge)
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
@@ -54,6 +54,44 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 - Doc drift found & fixed in this commit: open-gaps list still claimed
   VERTICAL_SLICE_TRACE.md "not yet written" after W6 landed it (stale
   gap #6 removed).
+
+## WAVE 7 deltas (2026-09-29, ADR-018)
+
+1. **Audio decode leg** (ove-decode): audio streams decode through the
+   same session machine — canonical planar-f32 ("fltp") surface at the
+   SOURCE rate/layout (swresample format conversion ONLY; a resample is
+   structurally impossible in the adapter), per-frame duration =
+   nb_samples/rate exact, audio floor+trim seek policy (the straddling
+   frame is delivered whole; the caller trims the exact sample in-point),
+   audio frames unpooled with `reclaim()` typed-rejected. A-1..A-4 pin
+   the corpus facts (priming trimmed, tail padded to the AAC grid,
+   contiguity, exact in-points).
+2. **AAC encoder leg** (ove-encode, native libavcodec aac): `AudioEncoder`
+   trait + `FfmpegAacEncoder` — caller samples buffered to the 1024 grid,
+   feed contiguity ENFORCED (typed mismatch on a wrong cursor),
+   small-last-frame branch detected from `AV_CODEC_CAP_SMALL_LAST_FRAME`
+   and reported, CBR-only (CRF typed `Unsupported`), libav identity
+   recorded. `TrackSpec::initial_padding` added so the muxer records the
+   priming delay and the container writes the trim edit list — the FILE
+   duration stays sample-exact (verified against a CLI-produced reference:
+   first packet pts −1024, elst 1024, duration 44100/44100).
+3. **WAV/PCM out**: pure-Rust PCM16 writer with the pinned
+   `round(clamp(x,−1,1)×32768)` conversion (no libav; deterministic
+   bytes; mono/stereo v1).
+4. **Engine audio** (ove-engine): `assemble_timeline_audio` — the FIRST
+   track's clips assembled as sample-exact per-clip ranges (every cut on
+   a sample boundary or typed `NonExactSampleCut`; speed ≠ 1 typed
+   `AudioRetimeUnsupported`; span authority enforced — short sources are
+   a typed error, never a silent pad). `export_reencode` pairs video
+   re-encode with audio re-encode automatically (ENCODER_SPEC §3.3);
+   `export_wav` delivers PCM out.
+5. **Planner Deferred → executable with ZERO planner changes**: the W3
+   pure logic already covered `reencode_available: true`. Test IDs:
+   decode A-1..A-4; encode E-8/E-8b/E-9/E-10 (A/V mux with two streams,
+   ffprobe + libav verified, drift ± 0 samples); engine
+   w7_audio_assembly_and_av_export (assembly 192000 samples ±0, A/V
+   export 4.000000 s both streams, WAV exact, document hash unchanged by
+   export work). Workspace 141/141.
 
 ## WAVE 6 deltas (2026-09-29, PR #8)
 
@@ -260,20 +298,20 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 | Crate | State | Evidence |
 |---|---|---|
-| ove-time | TESTED — 9 unit + 18 property (P1–P12 + recip/ceil) | 112/112 workspace local (2026-09-29) + CI |
+| ove-time | TESTED — 9 unit + 18 property (P1–P12 + recip/ceil) | 141/141 workspace local (2026-09-29, W7) + CI |
 | ove-timeline | TESTED — 10 properties (AVL primary, ADR-011) + 7 seam properties (S0–S6, ADR-013) | CI + local; bench in ADR-011 |
 | ove-media | TESTED — 13 unit (asset hash, FrameEnvelope, pool, probe types) | CI + local |
-| ove-decode | TESTED — 14 conformance (D-1..D-12) + 6 probe; libav confined | CI + local, both system and bundled libav |
+| ove-decode | TESTED — 14 conformance (D-1..D-12) + 6 probe + 4 audio (A-1..A-4); libav confined | CI + local, both system and bundled libav |
 | ove-render | TESTED — RG-1..RG-7 (purity, goldens, layer order, retime, split continuity, optimizer safety, color) | CI + local; ADR-014 |
-| ove-encode | TESTED — P01–P10 planner + E-1..E-5/E-7/H1–H5 conformance (28 tests; ffprobe/libav/pixel-verified, goldens committed) | 112/112 workspace local (2026-09-29); ADR-015 |
-| ove-project | TESTED — P-1..P-8 acceptance (11 tests incl. subprocess kill-9, compaction equivalence, corruption drill) | 123/123 workspace local (2026-09-29); ADR-016 |
-| ove-engine | TESTED — integration suite 6 (cooperating legs, kill-reopen-continue, render determinism, exports ffprobe-verified) | 131/131 workspace local (2026-09-29); ADR-017 |
-| ove-cli | TESTED — binary smoke (full flow via CARGO_BIN_EXE) | 131/131 workspace local (2026-09-29) |
+| ove-encode | TESTED — P01–P10 planner + E-1..E-5/E-7/H1–H5 video + E-8..E-10 audio (ffprobe/libav/pixel-verified, goldens committed) | 141/141 workspace local (2026-09-29); ADR-015/ADR-018 |
+| ove-project | TESTED — P-1..P-8 acceptance (11 tests incl. subprocess kill-9, compaction equivalence, corruption drill) | 141/141 workspace local (2026-09-29); ADR-016 |
+| ove-engine | TESTED — integration suite 6 + W7 audio vertical (assembly, A/V export, WAV, hash stability) | 141/141 workspace local (2026-09-29); ADR-017/ADR-018 |
+| ove-cli | TESTED — binary smoke (full flow via CARGO_BIN_EXE) | 141/141 workspace local (2026-09-29) |
 
 ## Current research / architecture status
 
-- ADR-001/002/005/007/008/009/010/011/012/013/014/015 ACCEPTED
-  (005 promoted 2026-09-29, v1 surface landed; 015 encode leg v1);
+- ADR-001/002/005/007/008/009/010/011/012/013/014/015/016/017/018 ACCEPTED
+  (005 promoted 2026-09-29, v1 surface landed; 018 audio leg v1);
   ADR-003/004/006
   PROPOSED with named evidence legs. ADR-007: overflow policy; ADR-013: seam
   + dead-leg removal; ADR-014: software renderer v1.
@@ -283,22 +321,21 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Current validation status
 
-- 132/132 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
-  1.98.1), fmt GREEN, clippy -D warnings GREEN, after W6 (2026-09-29).
+- 141/141 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
+  1.98.1), fmt GREEN, clippy GREEN (workspace, all targets), after W7
+  audio (2026-09-29). libav-confinement check PASS.
 - Bundled path: exercised by CI on this wave's PR (bundled libav now also
-  links swscale via the union feature set; portability guard scans the
-  same object tree; E-5 byte gate self-skips with an explicit report on a
-  different libav identity, structure gates always run).
-- CI: ALL GREEN through W2 (runs 36395655326 / 36392979166 /
-  36391223192; PRs 36391084190 / 36392782833 / 36395480815; HEAD run
-  36395951181). W3 PR #5 run: recorded at merge.
+  links swscale + swresample via the union feature set; portability guard
+  scans the same object tree; E-5 byte gate self-skips with an explicit
+  report on a different libav identity, structure gates always run).
+- CI: ALL GREEN through W6 merge + HEAD run 36472738518 on `451e67e`.
 
 ## Current CI state
 
 - Workflow: fmt + clippy + tests (bundled) + portability guard + cargo-audit
   + libav-confinement. Cache prefix `v2-portable-ffmpeg` (poisoned caches
   unreachable).
-- Latest confirmation: run 36472738518 on HEAD `451e67e` SUCCESS
+- Latest pre-W7 confirmation: run 36472738518 on HEAD `451e67e` SUCCESS
   (2026-09-28T19:30Z). All of runs 24–31 SUCCESS.
 
 ## Current blockers
@@ -307,20 +344,24 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Current open gaps (top)
 
-1. WAVE 7 audio: decode audio streams, AAC seam re-encode, sample-exact
-   A/V mux (± 0 samples), audio render graph legs.
-2. OpenH264/SVT-AV1 encoder legs; E-6 kill-resume execution at segment
+1. WAVE 8 keyframes: property→keyframes→interpolation (linear/hold) →
+   evaluation over exact time; property tests (monotonic keys, boundary
+   exactness, split-preserve).
+2. Audio named gaps (ADR-018): multi-track mixing/overlaps, audio
+   retiming, multi-lane assembly, AAC byte goldens (E-5 keying), E-6
+   audio checkpoint execution.
+3. OpenH264/SVT-AV1 encoder legs; E-6 kill-resume execution at segment
    granularity (checkpoint fields exist).
-3. Mutation-style "test the tests" not yet systematic.
-4. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
-5. GitHub PAT used across chat sessions must be rotated by the owner
+4. Mutation-style "test the tests" not yet systematic.
+5. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
+6. GitHub PAT used across chat sessions must be rotated by the owner
    (standing security rule, DEV_ENV.md) — outside engine scope, flagged.
 
 ## Current wave order (directive §37, unchanged)
 
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
 3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
-7 audio → 8 keyframes → 9 GPU → 10–12 platforms → 13 conformance →
+7 audio ✓ → 8 keyframes → 9 GPU → 10–12 platforms → 13 conformance →
 14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
 19 perf → 20 docs/release → 21 production audit.
 
@@ -329,6 +370,14 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 - ADR-012 (2026-09-27): CI bundled-FFmpeg portability — wrapper + cache prefix
   + guard. Confidence 0.92. Reopen condition: ffmpeg-sys-next flag change (guard
   fails loudly) or CI SIGILL recurrence.
+- ADR-018 (2026-09-29): audio leg v1 — canonical planar-f32 decoded surface
+  (format conversion only, never a resample), audio floor+trim seek policy,
+  sample-count authority with TrackSpec::initial_padding → container edit-list
+  trim (reference-pipeline-verified), small-last-frame branch declared, WAV
+  PCM16 out pure Rust, engine single-lane assembly with typed exactness
+  errors. Confidence 0.88. Reopen: an encoder without SMALL_LAST_FRAME, a
+  non-1/rate audio time base, or a mixing requirement (render-graph audio
+  legs).
 - ADR-007 amendment (2026-09-28): ove-time overflow policy = intentional panic
   (fail-fast); i64::MIN safe except negation (panics); checked variants deferred
   to first non-panicking consumer. Confidence 0.93. Reopen condition: an FFI
@@ -372,9 +421,7 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 7 — audio (BUILD_PLAN wave 7): audio decode legs, the AAC encoder
-adapter leg (sample-exact feed/drain, ENCODER_SPEC §2 sample-count
-authority), A/V export with seam re-encode per ENCODER_SPEC §3.3 (video
-copy + audio re-encode at non-aligned boundaries — the planner's Deferred
-becomes executable), audio render-graph input legs. Land via PR with
-fmt/clippy/tests green and this file updated, then WAVE 8 (keyframes).
+WAVE 8 — keyframes (BUILD_PLAN wave 7b): property→keyframes→interpolation
+(linear/hold first) → evaluation over exact time; property tests (monotonic
+keys, boundary exactness, split-preserve). Land via PR with
+fmt/clippy/tests green and this file updated, then WAVE 9 (GPU).
