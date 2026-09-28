@@ -6,7 +6,7 @@
 
 WAVE: 4 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 merged as d0f1ce0; W4 = this wave's PR (hash at merge)
+COMMIT: W3 = PR #5 merged as d0f1ce0; W4 = PR #6 merged as 37d1e59a
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
