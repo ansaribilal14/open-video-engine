@@ -35,6 +35,21 @@ Free rationals remain the ingest/boundary representation for source PTS and mixe
 rate clip edges; they are converted to the project axis at ingest, exactly.
 engine/ove-time encodes this as a regression guard (test `p3b`).
 
+Refinement (2026-09-28, takeover W0.6 — overflow policy made explicit, closes
+audit §10 #1/#2): **arithmetic overflow in ove-time is a CONTRACT VIOLATION and
+PANICS (fail-fast); it never wraps and never saturates.** Rationale:
+(a) saturation is silent approximation — fatal to the exactness mission (E-002);
+(b) the fixed-tick-axis discipline above makes overflow unreachable for
+legitimate aggregates, so any overflow is a caller bug that must be loud;
+(c) property test p3b already asserts the panic (catch_unwind) — code truth.
+**i64::MIN contract**: construction/normalization/cmp/half/floor_div_rate are
+i64::MIN-safe (gcd computed on unsigned magnitudes — `abs()` on i64::MIN
+overflows; cross-multiplication in i128); negation of i64::MIN has no
+representable value and panics by the same contract. Checked (non-panicking)
+variants are deferred until the first non-panicking consumer appears (FFI
+wave); they must NOT be added speculatively. Pinned by property tests P11
+(extreme safety) and P12 (overflow panics, exact boundaries do not).
+
 ## REJECTED ALTERNATIVES
 A: unfixable determinism. B: breaks on mixed-rate + audio-sample alignment. C: workable
 but loses source-rate provenance; may combine with D as the project-time axis.
