@@ -227,6 +227,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ove-render"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "ove-media",
+ "ove-time",
+ "ove-timeline",
+]
+
+[[package]]
 name = "ove-time"
 version = "0.1.0"
 dependencies = [

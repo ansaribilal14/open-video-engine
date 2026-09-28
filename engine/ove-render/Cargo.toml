@@ -1,0 +1,13 @@
+[package]
+name = "ove-render"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["open-video-engine contributors"]
+description = "Software reference renderer: deterministic RenderPlan compile + CPU RGBA execution (RENDER_GRAPH_SPEC; ADR-014 — software-first, GPU is only a backend)"
+
+[dependencies]
+ove-time = { path = "../ove-time" }
+ove-timeline = { path = "../ove-timeline" }
+ove-media = { path = "../ove-media" }
+blake3 = "1.8"
