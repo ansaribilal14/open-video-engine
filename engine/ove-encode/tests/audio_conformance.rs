@@ -431,7 +431,7 @@ fn e10_wav_pcm16_exact() {
     // deterministic arithmetic signal (bit-exact everywhere: no transcendentals)
     let plane: Vec<f32> = (0..1000).map(|i| (i as f32) * 0.0005 - 0.25).collect();
     let p = out_path("e10.wav");
-    let n = write_wav_s16(&p, &[plane.clone()], RATE).expect("write wav");
+    let n = write_wav_s16(&p, std::slice::from_ref(&plane), RATE).expect("write wav");
     assert_eq!(n, 1000, "sample frames written");
 
     let b = std::fs::read(&p).expect("read back");
@@ -453,8 +453,8 @@ fn e10_wav_pcm16_exact() {
     assert_eq!(b.len(), 44 + 2000);
 
     // pinned conversion: s16 = round(clamp(x,-1,1) × 32768)
-    for (i, chunk) in b[44..].chunks_exact(2).enumerate() {
-        let got = i16::from_le_bytes(chunk.try_into().unwrap());
+    for (i, chunk) in b[44..].as_chunks::<2>().0.iter().enumerate() {
+        let got = i16::from_le_bytes(*chunk);
         let x = (plane[i].clamp(-1.0, 1.0) * 32768.0).round() as i32;
         let want = x.clamp(-32768, 32767) as i16;
         assert_eq!(got, want, "sample {i}");
