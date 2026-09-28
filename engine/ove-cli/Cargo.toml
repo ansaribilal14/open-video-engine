@@ -1,0 +1,16 @@
+[package]
+name = "ove-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Headless CLI for the open-video-engine (WAVE 5): drive the engine session — project lifecycle, imports, timeline edits, status, exports."
+
+[[bin]]
+name = "ove-cli"
+path = "src/main.rs"
+
+[dependencies]
+ove-time = { path = "../ove-time" }
+ove-media = { path = "../ove-media" }
+ove-timeline = { path = "../ove-timeline" }
+ove-engine = { path = "../ove-engine" }

@@ -40,6 +40,20 @@ impl ContentHash {
         &self.0
     }
 
+    /// Parse a 64-char lowercase hex digest back into a ContentHash —
+    /// a ROUND-TRIP constructor, NOT a hash of the hex text (from_bytes
+    /// hashes its input; this one reinterprets it as the digest).
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        if hex.len() != 64 {
+            return None;
+        }
+        let mut out = [0u8; 32];
+        for (i, b) in out.iter_mut().enumerate() {
+            *b = u8::from_str_radix(hex.get(i * 2..i * 2 + 2)?, 16).ok()?;
+        }
+        Some(ContentHash(out))
+    }
+
     pub fn hex(&self) -> String {
         let mut s = String::with_capacity(64);
         for b in &self.0 {

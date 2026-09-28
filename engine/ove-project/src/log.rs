@@ -198,6 +198,11 @@ pub struct LogEntry {
     /// Only on exec entries: the exact inverse command.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub undo: Option<LogPayload>,
+    /// The session's id-allocation cursor AFTER this entry executed (the
+    /// E-012 state rides the log: replay restores the exact cursor; 0 =
+    /// absent in legacy v1 logs, skip the restore).
+    #[serde(default)]
+    pub nid: u64,
 }
 
 /// Append-only handle (single writer). Flushes to the OS after every entry:

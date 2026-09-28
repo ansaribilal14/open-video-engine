@@ -1,0 +1,709 @@
+//! ove-engine — the headless engine session (WAVE 5; ENGINE_BUILD_PLAN
+//! wave 5: MEDIA+TIMELINE+PROJECT+RENDER+EXPORT cooperating).
+//!
+//! Architecture position (ADR-017): this crate is the INTEGRATION layer —
+//! the only non-adapter crate that depends on the adapter crates (ove-decode,
+//! ove-encode, which hold the libav linkage). The pure core (ove-time/
+//! timeline/media/render/project) stays adapter-free; the future platform
+//! shells (desktop/android/browser) sit at this same layer, never lower.
+//!
+//! Session shape (single-writer, v1):
+//!   * a [`Project`] owns persistence (write-through; crash-safe per ADR-016);
+//!   * probe records (`ProbeInfo`) are cached per asset for the session and
+//!     persisted as sidecars at import;
+//!   * timeline edits are ove-timeline Commands with EXPLICIT ids (E-012);
+//!   * the render path: timeline walk → ADR-013 seam mapping → exact
+//!     decoder seek (D-4/D-5) → YUV→RGBA boundary conversion (the engine's
+//!     declared single source→working-space conversion) → ove-render
+//!     compile+execute → RGBA output;
+//!   * the export paths: stream-copy (planner + packet passthrough) and
+//!     re-encode (render → RGBA → encoder-declared swscale → MP4).
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use ove_decode::ffmpeg::FfmpegSwDecoder;
+use ove_decode::{DecodeConfig, Decoder, SeekMode};
+use ove_encode::ffmpeg::{FfmpegCopySource, FfmpegMuxer, FfmpegSwEncoder};
+use ove_encode::{
+    Container, Encoder, EncoderConfig, Muxer, OutputInfo, OutputSink, RateControl, VideoCodec,
+    VideoProfile,
+};
+use ove_media::{
+    AssetRef, ColorTags, FrameEnvelope, FrameMemory, MatrixCoeffs, PixelFormat, Primaries,
+    ProbeInfo, Range, Transfer,
+};
+use ove_project::{Owner, Project, ProjectError};
+use ove_render::{
+    compile_frame, FrameSource, Placement, RenderInput, SoftwareRenderer, TrackInput,
+};
+use ove_time::Rational;
+use ove_timeline::mapping::ClipWindow;
+use ove_timeline::{Clip, Command, TrackId, TrackKind};
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EngineError {
+    Project(ProjectError),
+    /// Media rejected at import (unreadable, no video stream, ...). Named.
+    Import(String),
+    /// Unknown asset id/hash for this session.
+    UnknownAsset(String),
+    Timeline(ove_timeline::TimelineError),
+    Render(ove_render::RenderError),
+    Compile(ove_render::CompileError),
+    Encode(ove_encode::EncodeError),
+    Mux(ove_encode::MuxError),
+    /// The requested timeline time maps outside the source (ADR-013 seam).
+    Seam(ove_timeline::mapping::SeamError),
+    /// No placement covers the requested output time.
+    NoPlacement {
+        at: Rational,
+    },
+    Internal(String),
+}
+
+impl std::fmt::Display for EngineError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EngineError::Project(e) => write!(f, "project: {e}"),
+            EngineError::Import(d) => write!(f, "import: {d}"),
+            EngineError::UnknownAsset(d) => write!(f, "unknown asset: {d}"),
+            EngineError::Timeline(e) => write!(f, "timeline: {e:?}"),
+            EngineError::Render(e) => write!(f, "render: {e:?}"),
+            EngineError::Compile(e) => write!(f, "compile: {e:?}"),
+            EngineError::Encode(e) => write!(f, "encode: {e:?}"),
+            EngineError::Mux(e) => write!(f, "mux: {e:?}"),
+            EngineError::Seam(e) => write!(f, "seam: {e:?}"),
+            EngineError::NoPlacement { at } => write!(f, "no placement covers t={at}"),
+            EngineError::Internal(d) => write!(f, "internal: {d}"),
+        }
+    }
+}
+
+impl std::error::Error for EngineError {}
+
+impl From<ProjectError> for EngineError {
+    fn from(e: ProjectError) -> Self {
+        EngineError::Project(e)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Engine session
+// ---------------------------------------------------------------------------
+
+/// One imported media source, keyed by content hash.
+#[derive(Clone, Debug)]
+pub struct SourceMedia {
+    pub hash: ove_media::ContentHash,
+    pub probe: ProbeInfo,
+}
+
+pub struct Engine {
+    project: Project,
+    sources: BTreeMap<String, SourceMedia>,
+}
+
+impl Engine {
+    // -- lifecycle ----------------------------------------------------------
+
+    pub fn create(dir: &Path, tick_axis: (i64, i64)) -> Result<Self, EngineError> {
+        Ok(Engine {
+            project: Project::create(dir, tick_axis)?,
+            sources: BTreeMap::new(),
+        })
+    }
+
+    pub fn open(dir: &Path) -> Result<Self, EngineError> {
+        let project = Project::open(dir)?;
+        // re-hydrate the probe cache from sidecars (hash-addressed)
+        let mut sources = BTreeMap::new();
+        for entry in project.assets() {
+            let probe_path = project.dir().join(
+                entry
+                    .probe
+                    .clone()
+                    .unwrap_or_else(|| format!("assets/{}/probe.json", entry.content_hash)),
+            );
+            if let Ok(raw) = std::fs::read_to_string(&probe_path) {
+                if let Ok(probe) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    if let Ok(probe) = serde_json::from_value::<ProbeInfo>(probe) {
+                        // round-trip the digest (from_hex), never re-hash it
+                        if let Some(hash) = ove_media::ContentHash::from_hex(&entry.content_hash) {
+                            sources.insert(entry.content_hash.clone(), SourceMedia { hash, probe });
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Engine { project, sources })
+    }
+
+    pub fn dir(&self) -> &Path {
+        self.project.dir()
+    }
+
+    pub fn state_hash(&self) -> String {
+        self.project.state_hash()
+    }
+
+    pub fn uuid(&self) -> &str {
+        self.project.uuid()
+    }
+
+    pub fn project(&self) -> &Project {
+        &self.project
+    }
+
+    // -- import ---------------------------------------------------------------
+
+    /// Import media: full probe (keyframe index + VFR) via the decode
+    /// adapter, content-hash-addressed copy into the project, probe sidecar.
+    pub fn import_media(&mut self, path: &Path) -> Result<String, EngineError> {
+        let asset = AssetRef::from_path(path).map_err(|e| EngineError::Import(format!("{e}")))?;
+        let probe = ove_decode::ffmpeg::FfmpegProbe
+            .probe_full(&asset)
+            .map_err(|e| EngineError::Import(format!("probe: {e}")))?;
+        let probe_json = serde_json::to_value(&probe)
+            .map_err(|e| EngineError::Import(format!("probe serialization: {e}")))?;
+        let hash = self.project.import_asset(path, Some(&probe_json))?;
+        let hex = hash.hex();
+        self.sources
+            .insert(hex.clone(), SourceMedia { hash, probe });
+        Ok(hex)
+    }
+
+    pub fn source(&self, hex: &str) -> Option<&SourceMedia> {
+        self.sources.get(hex)
+    }
+
+    // -- timeline commands (explicit ids; E-012) ------------------------------
+
+    pub fn add_track(&mut self, id: TrackId, kind: TrackKind) -> Result<(), EngineError> {
+        self.project
+            .add_track(id, kind)
+            .map_err(EngineError::Project)
+    }
+
+    /// Allocate a fresh clip id and INSERT it appended to the track.
+    /// Returns the id used (allocation happens BEFORE command construction
+    /// — E-012). v1: per-clip asset binding is a session note (the first
+    /// imported source renders — ADR-017); the binding rides the log at W6.
+    pub fn add_clip(
+        &mut self,
+        track: TrackId,
+        asset_hex: &str,
+        duration: Rational,
+        source_in: Rational,
+    ) -> Result<u64, EngineError> {
+        if !self.sources.contains_key(asset_hex) {
+            return Err(EngineError::UnknownAsset(asset_hex.to_string()));
+        }
+        let len = self
+            .project
+            .timeline()
+            .track_len(track)
+            .map_err(EngineError::Timeline)?;
+        let clip_id = self.project.timeline_mut().alloc_id();
+        self.execute(Command::Insert {
+            track,
+            index: len,
+            clip: Clip::new(clip_id, duration, source_in),
+        })?;
+        Ok(clip_id)
+    }
+
+    pub fn split(&mut self, track: TrackId, id: u64, at: Rational) -> Result<u64, EngineError> {
+        let new_id = self.project.timeline_mut().alloc_id();
+        self.execute(Command::Split {
+            track,
+            id,
+            at,
+            new_id,
+        })?;
+        Ok(new_id)
+    }
+
+    pub fn resize(
+        &mut self,
+        track: TrackId,
+        id: u64,
+        duration: Rational,
+    ) -> Result<(), EngineError> {
+        self.execute(Command::Resize {
+            track,
+            id,
+            duration,
+        })
+    }
+
+    pub fn move_clip(
+        &mut self,
+        id: u64,
+        from_track: TrackId,
+        to_track: TrackId,
+        to_index: usize,
+    ) -> Result<(), EngineError> {
+        self.execute(Command::Move {
+            id,
+            from_track,
+            to_track,
+            to_index,
+        })
+    }
+
+    pub fn remove(&mut self, track: TrackId, id: u64) -> Result<(), EngineError> {
+        self.execute(Command::Remove { track, id })
+    }
+
+    pub fn execute(&mut self, cmd: Command) -> Result<(), EngineError> {
+        self.project
+            .execute(cmd, Owner::Human)
+            .map_err(EngineError::Project)
+    }
+
+    pub fn undo(&mut self) -> Result<bool, EngineError> {
+        self.project
+            .undo(Owner::Human)
+            .map_err(EngineError::Project)
+    }
+
+    pub fn redo(&mut self) -> Result<bool, EngineError> {
+        self.project
+            .redo(Owner::Human)
+            .map_err(EngineError::Project)
+    }
+
+    // -- render path ----------------------------------------------------------
+
+    /// Build the compiler input from the live timeline + probe records.
+    /// Track order = TrackId ascending (bottom-up layer order).
+    pub fn build_render_input(
+        &self,
+        output: &ove_render::OutputSpec,
+    ) -> Result<RenderInput, EngineError> {
+        let mut tracks = Vec::new();
+        for tid in self.project.timeline().track_ids() {
+            let mut placements = Vec::new();
+            let track = self
+                .project
+                .timeline()
+                .track_ref(tid)
+                .map_err(EngineError::Timeline)?;
+            track.walk(&mut |pos, start, clip: &Clip| {
+                // resolve the placement's source by clip id → asset (v1:
+                // every clip maps to the session's FIRST imported source —
+                // the per-clip asset binding rides the log at W6; recorded
+                // in ADR-017 as the v1 single-source note)
+                let Some((hex, media)) = self.sources.iter().next() else {
+                    return;
+                };
+                let Some(video) = media
+                    .probe
+                    .streams
+                    .iter()
+                    .find(|s| s.kind == ove_media::StreamKind::Video)
+                else {
+                    return;
+                };
+                let window = ClipWindow::from_clip(clip, start);
+                placements.push(Placement {
+                    clip_id: clip.id,
+                    window,
+                    source: source_id_of(hex),
+                    alpha: Rational::new(1, 1),
+                    offset: (0, 0),
+                    src_color: video
+                        .video
+                        .as_ref()
+                        .map(|v| v.color)
+                        .unwrap_or(all_unknown_color()),
+                });
+                let _ = pos;
+            });
+            tracks.push(TrackInput { placements });
+        }
+        Ok(RenderInput {
+            tracks,
+            output: output.clone(),
+        })
+    }
+
+    /// Render one output frame at timeline time `t` (exact): decode at the
+    /// mapped source pts → RGBA boundary conversion → compile → execute.
+    pub fn render_frame(
+        &mut self,
+        output: &ove_render::OutputSpec,
+        t: Rational,
+    ) -> Result<FrameEnvelope, EngineError> {
+        let input = self.build_render_input(output)?;
+        let plan =
+            compile_frame(&input, frame_index_of(output, t)).map_err(EngineError::Compile)?;
+        // FrameSource: decode-on-demand per placement source
+        let mut sources: std::collections::HashMap<u64, DecodeSource<'_>> =
+            std::collections::HashMap::new();
+        for (hex, media) in &self.sources {
+            let sid = source_id_of(hex);
+            sources.insert(sid, DecodeSource::new(self.project.dir(), media));
+        }
+        let refs: std::collections::HashMap<u64, &dyn FrameSource> = sources
+            .iter()
+            .map(|(k, v)| (*k, v as &dyn FrameSource))
+            .collect();
+        let renderer = SoftwareRenderer::new(refs);
+        renderer.execute_frame(&plan).map_err(EngineError::Render)
+    }
+
+    // -- export paths -----------------------------------------------------------
+
+    /// Re-encode export: render every output frame → encoder (RGBA input,
+    /// declared swscale conversion) → MP4. Video-only in v1 (W7 adds audio).
+    pub fn export_reencode(
+        &mut self,
+        out: &Path,
+        output: &ove_render::OutputSpec,
+        n_frames: i64,
+    ) -> Result<OutputInfo, EngineError> {
+        // output geometry comes from the first video source (v1)
+        let (w, h, color) = self.first_video_geometry()?;
+        let cfg = EncoderConfig {
+            codec: VideoCodec::Mpeg4,
+            profile: VideoProfile {
+                width: w,
+                height: h,
+                frame_rate: Rational::new(output.rate_num, output.rate_den),
+                pixel_format: PixelFormat::Rgba,
+                color,
+                gop: 12,
+                bitexact: true,
+            },
+            rate: RateControl::Crf { quality: 6 },
+        };
+        let mut enc = FfmpegSwEncoder::configure(cfg).map_err(EngineError::Encode)?;
+        let track = enc.track_spec().map_err(EngineError::Encode)?;
+        for k in 0..n_frames {
+            let t = output.frame_pts(k);
+            let mut frame = self.render_frame(output, t)?;
+            frame.pts = t;
+            frame.duration = Rational::new(output.rate_den, output.rate_num);
+            enc.feed(frame).map_err(EngineError::Encode)?;
+        }
+        let packets = enc.drain().map_err(EngineError::Encode)?;
+        let mut mux = FfmpegMuxer::open(
+            OutputSink::File(out.to_path_buf()),
+            Container::Mp4 {
+                faststart: true,
+                bitexact: true,
+            },
+            vec![track],
+        )
+        .map_err(EngineError::Mux)?;
+        for p in packets {
+            mux.write(p).map_err(EngineError::Mux)?;
+        }
+        mux.finalize().map_err(EngineError::Mux)
+    }
+
+    /// Stream-copy export of a source range (keyframe-aligned via the pure
+    /// planner; snaps reported). Single video source, video-only in v1.
+    pub fn export_copy(
+        &mut self,
+        asset_hex: &str,
+        start: Rational,
+        end: Rational,
+        out: &Path,
+    ) -> Result<(OutputInfo, Vec<ove_encode::planner::SnapRecord>), EngineError> {
+        let media = self
+            .sources
+            .get(asset_hex)
+            .ok_or_else(|| EngineError::UnknownAsset(asset_hex.to_string()))?
+            .clone();
+        let probe = &media.probe;
+        let Some(vstream) = probe
+            .streams
+            .iter()
+            .find(|s| s.kind == ove_media::StreamKind::Video)
+        else {
+            return Err(EngineError::Import("no video stream".into()));
+        };
+        let kfs: Vec<Rational> = probe
+            .keyframe_index
+            .as_ref()
+            .map(|idx| idx.entries.iter().map(|e| e.pts).collect())
+            .unwrap_or_default();
+        let media_end = vstream.duration.unwrap_or_else(|| Rational::zero(1));
+        let input = ove_encode::planner::TrackInput {
+            stream_id: ove_media::StreamId(vstream.id.0),
+            kind: ove_encode::planner::TrackKindTag::Video,
+            keyframes: kfs,
+            media_end,
+            audio_grid: None,
+            reencode_available: false,
+        };
+        let plan = ove_encode::planner::plan_export(
+            &[input],
+            ove_encode::planner::TimeRange::new(start, end)
+                .map_err(|e| EngineError::Internal(e.to_string()))?,
+            ove_encode::planner::CopyPolicy::KeyframeAlignedOnly,
+        )
+        .map_err(|e| EngineError::Internal(e.to_string()))?;
+        let span = plan
+            .copy_span_of(ove_media::StreamId(vstream.id.0))
+            .ok_or_else(|| EngineError::Internal("plan produced no copy span".into()))?;
+        let snaps = plan.snaps().into_iter().map(|(_, s)| s).collect();
+
+        // execute: demux source packets in the snapped span, shift to 0, mux
+        let asset_path = self
+            .project
+            .dir()
+            .join(format!("assets/{}/src.mp4", media.hash.hex()));
+        let asset =
+            AssetRef::from_path(&asset_path).map_err(|e| EngineError::Import(format!("{e}")))?;
+        let mut source = FfmpegCopySource::open(&asset).map_err(EngineError::Mux)?;
+        let parsed = source
+            .stream_by_source_index(vstream.id.0 as usize)
+            .ok_or_else(|| EngineError::Import("video stream vanished".into()))?
+            .clone();
+        let track = parsed
+            .track_spec(ove_media::StreamId(0))
+            .map_err(EngineError::Mux)?;
+        let packets = source
+            .read_packets(
+                &span,
+                &[vstream.id.0 as usize],
+                &[(vstream.id.0 as usize, ove_media::StreamId(0))],
+            )
+            .map_err(EngineError::Mux)?;
+        let mut mux = FfmpegMuxer::open(
+            OutputSink::File(out.to_path_buf()),
+            Container::Mp4 {
+                faststart: true,
+                bitexact: true,
+            },
+            vec![track],
+        )
+        .map_err(EngineError::Mux)?;
+        let n = packets.len();
+        for p in packets {
+            mux.write(p).map_err(EngineError::Mux)?;
+        }
+        let _ = n;
+        let info = mux.finalize().map_err(EngineError::Mux)?;
+        Ok((info, snaps))
+    }
+
+    fn first_video_geometry(&self) -> Result<(u32, u32, ColorTags), EngineError> {
+        for media in self.sources.values() {
+            if let Some(v) = media
+                .probe
+                .streams
+                .iter()
+                .find(|s| s.kind == ove_media::StreamKind::Video)
+            {
+                if let Some(vd) = &v.video {
+                    return Ok((vd.width, vd.height, vd.color));
+                }
+            }
+        }
+        Err(EngineError::Import("no video source imported".into()))
+    }
+}
+
+/// All-unknown tags (unknown-as-value; never invented tags).
+fn all_unknown_color() -> ColorTags {
+    ColorTags {
+        primaries: Primaries::Unknown,
+        transfer: Transfer::Unknown,
+        matrix: MatrixCoeffs::Unknown,
+        range: Range::Unknown,
+        chroma_loc: None,
+    }
+}
+
+fn source_id_of(hex: &str) -> u64 {
+    // stable 64-bit source id from the content hash (explicit identity; not
+    // a positional index)
+    let bytes = decode_hex_32(hex).unwrap_or_default();
+    u64::from_le_bytes(bytes[..8].try_into().expect("32 bytes"))
+}
+
+fn decode_hex_32(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(out)
+}
+
+fn frame_index_of(output: &ove_render::OutputSpec, t: Rational) -> i64 {
+    // k = floor(t × rate) — frame k covers [k/rate, (k+1)/rate). Exact
+    // i128 arithmetic; frame-aligned callers hit frame_pts(k) == t exactly.
+    let numer = (t.num() as i128) * (output.rate_num as i128);
+    let denom = (t.den() as i128) * (output.rate_den as i128);
+    (numer / denom) as i64
+}
+
+// ---------------------------------------------------------------------------
+// Decode source — the FrameSource adapter (decode → RGBA boundary conversion)
+// ---------------------------------------------------------------------------
+
+/// One decode-backed source. Interior mutability = the decoder session +
+/// last-decoded frame cache; single-writer (v1), so RefCell is sound here.
+struct DecodeSource<'a> {
+    dir: &'a Path,
+    media: &'a SourceMedia,
+    session: std::cell::RefCell<Option<(FfmpegSwDecoder, Rational)>>,
+}
+
+impl<'a> DecodeSource<'a> {
+    fn new(dir: &'a Path, media: &'a SourceMedia) -> Self {
+        DecodeSource {
+            dir,
+            media,
+            session: std::cell::RefCell::new(None),
+        }
+    }
+
+    fn open_decoder(&self) -> Result<FfmpegSwDecoder, EngineError> {
+        let hex = self.media.hash.hex();
+        let asset_path = self.dir.join(format!("assets/{hex}/src.mp4"));
+        let asset =
+            AssetRef::from_path(&asset_path).map_err(|e| EngineError::Import(format!("{e}")))?;
+        let vstream = self
+            .media
+            .probe
+            .streams
+            .iter()
+            .find(|s| s.kind == ove_media::StreamKind::Video)
+            .ok_or_else(|| EngineError::Import("no video stream".into()))?;
+        FfmpegSwDecoder::open(&asset, vstream.id, DecodeConfig::default())
+            .map_err(|e| EngineError::Import(format!("decode open: {e}")))
+    }
+}
+
+impl FrameSource for DecodeSource<'_> {
+    /// The D-5 floor rule: return the frame with the GREATEST pts ≤ target.
+    /// Decode session is reused across fetches (one per source per export).
+    fn fetch(&self, target: Rational) -> Option<FrameEnvelope> {
+        let mut session = self.session.borrow_mut();
+        if session.is_none() {
+            let dec = self.open_decoder().ok()?;
+            *session = Some((dec, Rational::new(-1, 1)));
+        }
+        let (dec, last_pts) = session.as_mut().expect("just set");
+
+        // seek only when the target moved backwards or past the decoded frame
+        if *last_pts < Rational::zero(1) || target < *last_pts {
+            dec.seek(target, SeekMode::Exact).ok()?;
+        }
+        loop {
+            let frame = dec.next().ok().flatten()?;
+            if frame.pts > target {
+                // decoded past the target with no frame exactly at it: the
+                // PREVIOUS frame is the floor; keep it cached for the next
+                // call at the same target (CFR render loop hits exact pts)
+                let keep = last_frame_cache(dec, target);
+                return keep;
+            }
+            if frame.pts == target {
+                *last_pts = target;
+                return yuv_to_rgba(&frame);
+            }
+            // pts < target: decode forward (Exact-seek drop discipline, D-4)
+            *last_pts = frame.pts;
+        }
+    }
+}
+
+fn last_frame_cache(_dec: &mut FfmpegSwDecoder, _target: Rational) -> Option<FrameEnvelope> {
+    // v1: a frame whose pts > target without an exact hit means the source
+    // is not frame-aligned with the request — None is the honest answer
+    // (the caller asked for a nonexistent frame time; CFR sessions always
+    // hit exactly by construction of frame_pts).
+    None
+}
+
+/// YUV420P → RGBA8, integer-only (deterministic on every platform).
+/// Limited-range studio swap with the matrix chosen from the frame's
+/// declared tags; Unknown → BT.601 (the SD convention). Chroma upsample =
+/// nearest (replicate) — declared v1 limitation, ADR-017.
+pub fn yuv420p_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
+    if frame.pixel_format != PixelFormat::Yuv420p || frame.memory != FrameMemory::Cpu {
+        return None;
+    }
+    let fb = frame.cpu_bytes()?;
+    if fb.strides.len() != 3 {
+        return None;
+    }
+    let (w, h) = (frame.width as usize, frame.height as usize);
+    let y_plane = &fb.data[..fb.strides[0] * h];
+    let u_off = fb.strides[0] * h;
+    let v_off = u_off + fb.strides[1] * (h.div_ceil(2));
+    let u_plane = &fb.data[u_off..u_off + fb.strides[1] * (h.div_ceil(2))];
+    let v_plane = &fb.data[v_off..];
+
+    let (kr, kb): (i32, i32) = match frame.color.matrix {
+        ove_media::MatrixCoeffs::Bt709 => (2104, 1613), // fixed-point s15: kr<<16 / (1-kr-kb)
+        _ => (2104, 1546),                              // BT.601 default
+    };
+    let _ = (kr, kb);
+    // Limited-range integer coefficients (x256), per matrix:
+    let (cr, cb, cu, cv): (i32, i32, i32, i32) = match frame.color.matrix {
+        ove_media::MatrixCoeffs::Bt709 => (298, 496, 55, 139),
+        _ => (298, 516, 100, 208),
+    };
+
+    let mut rgba = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        let yrow = &y_plane[y * fb.strides[0]..][..w];
+        let urow = &u_plane[(y / 2) * fb.strides[1]..][..w.div_ceil(2)];
+        let vrow = &v_plane[(y / 2) * fb.strides[2]..][..w.div_ceil(2)];
+        for x in 0..w {
+            let yy = yrow[x] as i32 - 16;
+            let uu = urow[x / 2] as i32 - 128;
+            let vv = vrow[x / 2] as i32 - 128;
+            let r = (cr * yy + cv * vv + 128) >> 8;
+            let g = (cr * yy - cu * uu - cv * vv + 128) >> 8;
+            let b = (cr * yy + cb * uu + 128) >> 8;
+            rgba.push(r.clamp(0, 255) as u8);
+            rgba.push(g.clamp(0, 255) as u8);
+            rgba.push(b.clamp(0, 255) as u8);
+            rgba.push(255);
+        }
+    }
+
+    // RGBA output carries the WORKING-space tags (the boundary conversion is
+    // the declared single conversion; the plan sees consistent RGBA).
+    let mut out_tags = frame.color;
+    out_tags.matrix = ove_media::MatrixCoeffs::Bt709;
+    out_tags.range = ove_media::Range::Full;
+    Some(FrameEnvelope::video_cpu(
+        frame.pts,
+        frame.duration,
+        frame.stream_id,
+        frame.width,
+        frame.height,
+        PixelFormat::Rgba,
+        frame.bit_depth,
+        out_tags,
+        ove_media::FrameBytes {
+            data: rgba,
+            strides: vec![w * 4],
+        },
+        frame.keyframe,
+        frame.backend.clone(),
+        frame.generation,
+    ))
+}
+
+/// Alias matching the crate-level name used in the session docs.
+fn yuv_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
+    yuv420p_to_rgba(frame)
+}

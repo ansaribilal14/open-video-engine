@@ -1,0 +1,17 @@
+[package]
+name = "ove-engine"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Headless engine session for the open-video-engine (WAVE 5): wires probe → asset import → timeline commands → project persistence → decode → render → export. Integration layer over the adapter crates (ove-decode/ove-encode); core crates stay libav-free."
+
+[dependencies]
+ove-time = { path = "../ove-time" }
+serde_json = "1"
+ove-media = { path = "../ove-media" }
+ove-timeline = { path = "../ove-timeline" }
+ove-render = { path = "../ove-render" }
+ove-project = { path = "../ove-project" }
+ove-decode = { path = "../ove-decode" }
+ove-encode = { path = "../ove-encode" }
+

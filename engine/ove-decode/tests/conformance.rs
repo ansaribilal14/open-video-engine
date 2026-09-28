@@ -73,6 +73,30 @@ fn keyframes_of(table: &str) -> Vec<Rational> {
         .collect()
 }
 
+/// Payload-content gate (W5 finding): a decoded frame MUST carry its full
+/// compact-layout payload — 320x240 YUV420P = 320*240 + 2*(160*120) bytes —
+/// and real content (not all zeros). This pins the pool `into_frame_bytes`
+/// bug class (empty payload shipped, tests passed vacuously on empty==empty
+/// comparisons) so it can never silently return.
+#[test]
+fn d13_decoded_payload_is_real() {
+    let a = asset("cfr24.mp4");
+    let mut dec =
+        FfmpegSwDecoder::open(&a, StreamId(0), DecodeConfig::default()).expect("open corpus file");
+    let f = dec.next().expect("clean decode").expect("first frame");
+    let fb = f.cpu_bytes().expect("cpu payload");
+    assert_eq!(
+        fb.data.len(),
+        320 * 240 + 2 * (160 * 120),
+        "payload size == declared geometry (compact YUV420P layout)"
+    );
+    assert_eq!(fb.strides, vec![320, 160, 160]);
+    assert!(
+        fb.data.iter().any(|&b| b != 0),
+        "payload carries real pixels"
+    );
+}
+
 /// Sequential decode of every frame from 0.
 fn decode_all(a: &AssetRef, cfg: DecodeConfig) -> Vec<ove_media::FrameEnvelope> {
     let mut dec = FfmpegSwDecoder::open(a, StreamId(0), cfg).expect("open corpus file");
