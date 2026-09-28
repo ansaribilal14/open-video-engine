@@ -1,0 +1,26 @@
+[package]
+name = "ove-encode"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Encoder + muxer + export-route abstraction for the open-video-engine (ADR-005/ADR-015, ENCODER_SPEC). Adapter crate: one of the ONLY two crates allowed to link libav* (confinement gate)."
+
+[dependencies]
+ove-time = { path = "../ove-time" }
+ove-media = { path = "../ove-media" }
+sha2 = "0.10"
+ffmpeg-sys-next = { version = "7.1", default-features = false, features = [
+    "avformat",
+    "avcodec",
+    "swscale",
+] }
+
+[features]
+# CI-only: compile the pinned FFmpeg 7.1 from source (see ove-decode/bundled).
+# Local builds use distro FFmpeg 7.1.5 via pkg-config. Same major.minor both
+# sides; encoder byte-goldens are version-keyed (ENCODER_SPEC §4/E-5 note).
+bundled = ["ffmpeg-sys-next/build"]
+
+[dev-dependencies]
+serde_json = "1"
+ove-decode = { path = "../ove-decode" }

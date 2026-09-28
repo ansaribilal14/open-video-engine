@@ -3,6 +3,11 @@
 > Delta document over research/adr/*. Statuses re-verified against files + tests by the
 > audit. New ADRs proposed by the audit are listed at the bottom (created as spec docs;
 > they become ADRs when the vertical slice proves their contracts).
+>
+> 2026-09-29 additions: ADR-015 (encode leg v1) ACCEPTED — E-1..E-5/E-7
+> green, 28 tests; ADR-005 promoted PROPOSED → ACCEPTED for the v1 surface
+> (trait + MP4 mux + stream-copy route landed; hw/WebCodecs legs remain
+> adapter-stage future work).
 
 ## Current registry (verified)
 

@@ -1,0 +1,6 @@
+{
+  "config": "320x240 yuv420p 24fps gop24 qscale6 bitexact mp4 faststart+bitexact",
+  "frames": 48,
+  "libav_versions": "7.1.5-0+deb13u1 (avutil=3876708, avcodec=4002661, avformat=3999591, swscale=525156)",
+  "sha256": "940beb8e4e96191ebf5ef93580e5cdd3d6e9d39c888bb281aaa14207ec4b5b17"
+}
