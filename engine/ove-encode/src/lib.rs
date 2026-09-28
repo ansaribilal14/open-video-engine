@@ -29,6 +29,7 @@
 
 pub mod ffmpeg;
 pub mod planner;
+pub mod wav;
 
 use ove_media::{ColorTags, PixelFormat, StreamId};
 use ove_time::Rational;
@@ -234,6 +235,12 @@ pub struct TrackSpec {
     pub kind: TrackKind,
     /// Codec global header (esds AudioSpecificConfig / mpeg4 extradata).
     pub extradata: Vec<u8>,
+    /// Codec priming delay in samples (AAC encoder delay, W7/ADR-018): the
+    /// muxer records it on the codec parameters so the container writes the
+    /// trim edit list — the FILE duration stays sample-exact even though
+    /// the encoder's raw packets carry the padded pre-roll. Video/copy
+    /// tracks carry 0.
+    pub initial_padding: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -357,6 +364,47 @@ pub trait Encoder: Send {
 
     /// Flush: deliver all buffered packets then signal EOS. After `drain`
     /// the session is finished (one-shot per ENCODER_SPEC §1).
+    fn drain(&mut self) -> Result<Vec<EncodedPacket>, EncodeError>;
+}
+
+// ---------------------------------------------------------------------------
+// Audio encoding (W7, ENCODER_SPEC §2 sample-count authority, ADR-018)
+// ---------------------------------------------------------------------------
+
+/// Audio encoder configuration. The input surface is the decode leg's
+/// canonical decoded PCM: planar f32 ("fltp") at `sample_rate`/`channels`.
+pub struct AudioEncoderConfig {
+    pub codec: AudioCodec,
+    pub sample_rate: u32,
+    pub channels: u32,
+    pub rate: RateControl,
+    /// Strip encoder identity metadata (deterministic byte-stable exports).
+    pub bitexact: bool,
+}
+
+/// The audio encoder session (ENCODER_SPEC §1 pattern, sample-count
+/// authority): configure → feed contiguous audio envelopes → drain.
+///
+/// Exactness contract (ENCODER_SPEC §2): audio sample counts are
+/// authoritative — every fed envelope carries an EXACT nb_samples
+/// (duration × sample_rate must divide exactly) at an EXACT contiguous
+/// pts (cursor/sample_rate axis); output packet durations sum to the fed
+/// sample count on the encoder's grid (an interior-frame remainder is
+/// padded/trimmed per the adapter's declared small-last-frame policy).
+pub trait AudioEncoder: Send {
+    fn configure(cfg: AudioEncoderConfig) -> Result<Self, EncodeError>
+    where
+        Self: Sized;
+
+    /// The muxing spec for this encoder's output track (timescale =
+    /// sample_rate; extradata = AudioSpecificConfig).
+    fn track_spec(&self) -> Result<TrackSpec, EncodeError>;
+
+    /// Feed one audio envelope (planar f32 CPU payload). Frames must be
+    /// contiguous: `frame.pts` must equal (samples fed so far) / sample_rate.
+    fn feed(&mut self, frame: ove_media::FrameEnvelope) -> Result<(), EncodeError>;
+
+    /// Flush: encode the remainder, deliver all packets, signal EOS.
     fn drain(&mut self) -> Result<Vec<EncodedPacket>, EncodeError>;
 }
 

@@ -693,6 +693,7 @@ fn h4_muxer_rejects_unknown_track() {
             timescale: 24,
             kind: video_track_kind(),
             extradata: vec![],
+            initial_padding: 0,
         }],
     )
     .expect("open muxer");
@@ -739,6 +740,7 @@ fn h5_muxer_rejects_non_exact_pts() {
             timescale: 24,
             kind: video_track_kind(),
             extradata: vec![],
+            initial_padding: 0,
         }],
     )
     .expect("open muxer");

@@ -375,11 +375,17 @@ fn d8_error_model_corrupt_and_unreadable() {
         "got {e:?}"
     );
 
-    // audio-only stream request on a video+audio file: typed Unsupported (v1 scope)
-    let e = FfmpegSwDecoder::open(&asset("vidaud.mp4"), StreamId(1), DecodeConfig::default())
-        .err()
-        .expect("audio stream must be typed-rejected in v1");
-    assert!(matches!(e, DecodeError::Unsupported(_)), "got {e:?}");
+    // audio stream open: W7 (ADR-018) — opens successfully and declares the
+    // canonical decoded surface (the v1 typed-rejection flipped to the real
+    // audio leg; full A-1..A-4 suite in tests/audio_conformance.rs)
+    let dec = FfmpegSwDecoder::open(&asset("vidaud.mp4"), StreamId(1), DecodeConfig::default())
+        .expect("audio stream opens since W7");
+    let caps = dec.capabilities();
+    let a = caps.audio.as_ref().expect("audio caps declared");
+    assert_eq!(a.sample_rate, 44100, "corpus rate");
+    assert_eq!(a.channels, 1, "corpus layout");
+    assert_eq!(a.sample_format, "fltp", "canonical decoded PCM");
+    assert!(caps.pixel_formats.is_empty(), "video surface not declared");
 }
 
 // ---------------------------------------------------------------------------

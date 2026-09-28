@@ -11,6 +11,7 @@ ove-media = { path = "../ove-media" }
 ffmpeg-sys-next = { version = "7.1", default-features = false, features = [
     "avformat",
     "avcodec",
+    "swresample",
 ] }
 
 [features]

@@ -464,6 +464,7 @@ impl crate::Encoder for FfmpegSwEncoder {
                     frame_rate: rate,
                 },
                 extradata,
+                initial_padding: 0,
             };
 
             let caps = EncoderCaps {

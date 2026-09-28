@@ -11,6 +11,14 @@
 > a closed adapter allowlist {ove-decode, ove-encode}), §6 caps with
 > version-keyed goldens. v1 codec: native mpeg4 (LGPL, dependency-free);
 > OpenH264/SVT-AV1 = typed `Unsupported` until their legs land.
+>
+> **Audio implemented (2026-09-29, WAVE 7 / ADR-018)**: §2 sample-count
+> authority (AAC encoder leg, `AudioEncoder` trait, feed contiguity
+> enforced, `TrackSpec::initial_padding` → container edit-list trim, the
+> W3 `Deferred` audio route now executable via `reencode_available`), §3.3
+> v1 default (video + audio re-encode; the copy route pairs with audio
+> re-encode at seams), and the WAV/PCM out leg (pure Rust, PCM16). Tests:
+> E-8/E-8b/E-9/E-10.
 
 ## 1. Types
 
