@@ -44,6 +44,9 @@ MEDIA FILE → probe (ove-media) → asset {content_hash, streams, keyframe inde
   source-rate rationals; mapping is exact rational arithmetic (no fp), conversion at
   ingest is exact (ADR-007 refinement). Q-06 (map-in-format vs normalize) stays open —
   v1 stores source pts provenance in the asset record, mapping at query time.
+  **Implemented (2026-09-28, ADR-013)**: `ove-timeline::mapping` — ClipWindow/SourceClock,
+  exact forward/reverse mapping, ingest gate, keyframe-floor seek planning; property
+  suite S0–S6 pins it (mapping_properties.rs).
 - Keyframe index is mandatory for copy routes (E-007: mid-GOP copy cuts select wrong
   content; boundaries snap to keyframes unless re-encode is requested).
 

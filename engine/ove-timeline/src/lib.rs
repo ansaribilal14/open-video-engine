@@ -16,6 +16,7 @@
 
 pub mod avl;
 pub mod gap;
+pub mod mapping;
 pub mod oracle;
 
 use std::collections::{BTreeMap, HashSet};
