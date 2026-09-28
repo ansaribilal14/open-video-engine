@@ -209,11 +209,15 @@ impl Engine {
             .track_len(track)
             .map_err(EngineError::Timeline)?;
         let clip_id = self.project.timeline_mut().alloc_id();
-        self.execute(Command::Insert {
-            track,
-            index: len,
-            clip: Clip::new(clip_id, duration, source_in),
-        })?;
+        self.project
+            .execute_insert_asset(
+                track,
+                len,
+                Clip::new(clip_id, duration, source_in),
+                asset_hex.to_string(),
+                Owner::Human,
+            )
+            .map_err(EngineError::Project)?;
         Ok(clip_id)
     }
 
@@ -589,45 +593,35 @@ impl<'a> DecodeSource<'a> {
 }
 
 impl FrameSource for DecodeSource<'_> {
-    /// The D-5 floor rule: return the frame with the GREATEST pts ≤ target.
-    /// Decode session is reused across fetches (one per source per export).
+    /// The D-5 floor rule: return the frame with the GREATEST pts ≤ target
+    /// (exact hits are the common CFR case; multi-rate sources floor).
+    /// A fresh session per render pass (v1 simplicity; decode buffering
+    /// across a whole export is a perf-wave concern — recorded).
     fn fetch(&self, target: Rational) -> Option<FrameEnvelope> {
         let mut session = self.session.borrow_mut();
         if session.is_none() {
             let dec = self.open_decoder().ok()?;
             *session = Some((dec, Rational::new(-1, 1)));
         }
-        let (dec, last_pts) = session.as_mut().expect("just set");
+        let (dec, _last_pts) = session.as_mut().expect("just set");
 
-        // seek only when the target moved backwards or past the decoded frame
-        if *last_pts < Rational::zero(1) || target < *last_pts {
-            dec.seek(target, SeekMode::Exact).ok()?;
-        }
+        dec.seek(target, SeekMode::Exact).ok()?;
+        let mut floor: Option<FrameEnvelope> = None;
         loop {
             let frame = dec.next().ok().flatten()?;
             if frame.pts > target {
-                // decoded past the target with no frame exactly at it: the
-                // PREVIOUS frame is the floor; keep it cached for the next
-                // call at the same target (CFR render loop hits exact pts)
-                let keep = last_frame_cache(dec, target);
-                return keep;
+                // decoded past the target: the previous decoded frame is
+                // the floor (D-5); None only when the target precedes the
+                // first frame — the contract's honest empty answer.
+                return floor;
             }
             if frame.pts == target {
-                *last_pts = target;
                 return yuv_to_rgba(&frame);
             }
-            // pts < target: decode forward (Exact-seek drop discipline, D-4)
-            *last_pts = frame.pts;
+            // pts < target: keep it as the running floor (D-4 forward drop)
+            floor = yuv_to_rgba(&frame);
         }
     }
-}
-
-fn last_frame_cache(_dec: &mut FfmpegSwDecoder, _target: Rational) -> Option<FrameEnvelope> {
-    // v1: a frame whose pts > target without an exact hit means the source
-    // is not frame-aligned with the request — None is the honest answer
-    // (the caller asked for a nonexistent frame time; CFR sessions always
-    // hit exactly by construction of frame_pts).
-    None
 }
 
 /// YUV420P → RGBA8, integer-only (deterministic on every platform).

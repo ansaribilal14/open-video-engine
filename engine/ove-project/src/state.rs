@@ -70,6 +70,12 @@ pub struct StateMirror {
     /// not replay removed-id history, so both are stored).
     pub next_id: ClipId,
     pub used_ids: Vec<ClipId>,
+    /// Per-clip asset bindings (W6): clip id → asset content hash. Bindings
+    /// are permanent for the log's lifetime (no unbind verb in v1; removing
+    /// a clip leaves its binding — deterministic on replay, idempotent on
+    /// re-insert of the same id).
+    #[serde(default)]
+    pub clip_assets: BTreeMap<ClipId, String>,
 }
 
 impl StateMirror {
@@ -107,6 +113,7 @@ impl StateMirror {
             tracks,
             next_id: tl.next_id_value(),
             used_ids,
+            clip_assets: BTreeMap::new(),
         }
     }
 

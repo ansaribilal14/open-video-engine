@@ -4,9 +4,9 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 5 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli — all landed)
+WAVE: 6 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (merge hash recorded in the merge commit)
+COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8 (hash at merge)
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
@@ -32,6 +32,29 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
   1.98.1): 84/84 tests GREEN · fmt GREEN · clippy -D warnings GREEN.
 - Source inventory re-counted: 4,223 l (ove-time 378, ove-timeline 1,611,
   ove-media 1,332, ove-decode 145+suites, ove-render 643).
+
+## WAVE 6 deltas (2026-09-29, PR #8)
+
+1. **The directive W6 milestone is REAL and tested**
+   (ove-engine/tests/integration.rs::w6_vertical_slice_milestone): real
+   video ×2 (24 fps + 29.97 multi-rate) → probe → content-hash registry →
+   timeline commands (explicit ids, per-clip asset bindings riding the
+   log) → exact ADR-013 source mapping → decode → FrameEnvelope →
+   RenderPlan → software render → encode/mux → valid MP4 → ffprobe + libav
+   verified (120 frames, duration 5/1 exact) → save → kill → reopen →
+   SAME state hash → re-export byte-identical (deterministic SW pipeline,
+   file_sha256 equality).
+2. **Per-clip asset bindings ride the log** (LogPayload::Insert asset
+   field → record_entry_bindings on execute AND replay → StateMirror.
+   clip_assets in the document hash). Multi-source render resolves each
+   placement's source by binding; DecodeSource per source.
+3. **D-5 floor rule implemented in the decode source**: fetch returns the
+   greatest pts ≤ target (multi-rate sources floor honestly; exact hits
+   are the CFR case).
+4. **docs/VERTICAL_SLICE_TRACE.md written** — the three chains (import,
+   command+replay, AI/client→command→render→export) at file→crate→function
+   level, each hop exactness-annotated, each claim pinned by a named test,
+   with the non-claims (audio/GPU/agent transport) named as such.
 
 ## WAVE 5 deltas (2026-09-29, PR #7)
 
@@ -238,8 +261,8 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Current validation status
 
-- 131/131 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
-  1.98.1), fmt GREEN, clippy -D warnings GREEN, after W5 (2026-09-29).
+- 132/132 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
+  1.98.1), fmt GREEN, clippy -D warnings GREEN, after W6 (2026-09-29).
 - Bundled path: exercised by CI on this wave's PR (bundled libav now also
   links swscale via the union feature set; portability guard scans the
   same object tree; E-5 byte gate self-skips with an explicit report on a
@@ -260,13 +283,10 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Current open gaps (top)
 
-1. WAVE 6 vertical slice: per-clip asset binding in the log (multi-source
-   render scheduling), docs/VERTICAL_SLICE_TRACE.md (import chain,
-   command-replay chain, AI→command chain at source level), real-video
-   milestone end-to-end.
-2. AAC seam re-encode (audio wave W7); OpenH264/SVT-AV1 encoder legs;
-   E-6 kill-resume execution at segment granularity (checkpoint fields
-   exist).
+1. WAVE 7 audio: decode audio streams, AAC seam re-encode, sample-exact
+   A/V mux (± 0 samples), audio render graph legs.
+2. OpenH264/SVT-AV1 encoder legs; E-6 kill-resume execution at segment
+   granularity (checkpoint fields exist).
 3. Mutation-style "test the tests" not yet systematic.
 4. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
 5. GitHub PAT used across chat sessions must be rotated by the owner
@@ -277,7 +297,7 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 ## Current wave order (directive §37, unchanged)
 
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
-3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice →
+3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
 7 audio → 8 keyframes → 9 GPU → 10–12 platforms → 13 conformance →
 14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
 19 perf → 20 docs/release → 21 production audit.
@@ -330,11 +350,9 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Explicit next action
 
-WAVE 6 — vertical slice (BUILD_PLAN W6 quality gate): per-clip asset
-binding in the log; multi-source render; the directive's W6 milestone on
-a real video — probe → asset registry → content hash → timeline commands
-→ exact source mapping → decode → FrameEnvelope → RenderPlan → software
-render → encode/mux → valid MP4 → ffprobe verify → save → kill → reopen
-→ replay → SAME state hash → re-export semantically identical; plus
-docs/VERTICAL_SLICE_TRACE.md (import chain, command-replay chain,
-AI→command chain at source level). Land via PR, then WAVE 7 (audio).
+WAVE 7 — audio (BUILD_PLAN wave 7): audio decode legs, the AAC encoder
+adapter leg (sample-exact feed/drain, ENCODER_SPEC §2 sample-count
+authority), A/V export with seam re-encode per ENCODER_SPEC §3.3 (video
+copy + audio re-encode at non-aligned boundaries — the planner's Deferred
+becomes executable), audio render-graph input legs. Land via PR with
+fmt/clippy/tests green and this file updated, then WAVE 8 (keyframes).

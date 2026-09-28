@@ -29,6 +29,7 @@ pub mod log;
 pub mod manifest;
 pub mod state;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use ove_media::ContentHash;
@@ -130,6 +131,9 @@ pub struct Project {
     redo_stack: Vec<Command>,
     /// Entries loaded from disk at open (reconciliation bookkeeping).
     loaded_entries: u64,
+    /// Per-clip asset bindings (W6): clip id → asset content hash. Document
+    /// state (hashed via the mirror); maintained by execute + replay.
+    clip_assets: BTreeMap<u64, String>,
 }
 
 impl Project {
@@ -161,6 +165,7 @@ impl Project {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             loaded_entries: 0,
+            clip_assets: BTreeMap::new(),
         })
     }
 
@@ -171,6 +176,7 @@ impl Project {
         let meta = SnapshotMeta::load(&dir.join("snapshot"))?;
         let snapshot_seq = meta.as_ref().map(|m| m.snapshot_seq).unwrap_or(0);
 
+        let mut clip_assets: BTreeMap<u64, String> = BTreeMap::new();
         let mut timeline = match (&meta, snapshot_seq) {
             (Some(m), seq) if seq > 0 => {
                 let state_path = dir.join("snapshot").join(format!("state-{seq}.json"));
@@ -242,6 +248,7 @@ impl Project {
                     ),
                 });
             }
+            record_entry_bindings(&mut clip_assets, entry);
             replay_entry(&mut timeline, &mut undo_stack, &mut redo_stack, entry)?;
         }
         let loaded_entries = entries.len() as u64;
@@ -267,6 +274,7 @@ impl Project {
             undo_stack,
             redo_stack,
             loaded_entries,
+            clip_assets,
         })
     }
 
@@ -306,9 +314,12 @@ impl Project {
     }
 
     /// BLAKE3-256 hex of the document state (canonical mirror) — what the
-    /// P-1/P-2/P-3 acceptance tests compare.
+    /// P-1/P-2/P-3 acceptance tests compare. Includes per-clip asset
+    /// bindings (W6 document state).
     pub fn state_hash(&self) -> String {
-        state::StateMirror::from_timeline(&self.timeline).state_hash()
+        let mut mirror = state::StateMirror::from_timeline(&self.timeline);
+        mirror.clip_assets = self.clip_assets.clone();
+        mirror.state_hash()
     }
 
     pub fn timeline(&self) -> &Timeline {
@@ -342,6 +353,53 @@ impl Project {
             undo: Some(LogPayload::of_command(&inverse)),
             nid: self.timeline.next_id_value(),
         };
+        record_entry_bindings(&mut self.clip_assets, &entry);
+        let seq = self.writer.append(entry)?;
+        self.undo_stack.push(UndoStep {
+            inverse,
+            original: cmd,
+            exec_seq: seq,
+        });
+        self.redo_stack.clear();
+        self.touch_manifest()?;
+        Ok(())
+    }
+
+    /// Insert with a per-clip asset binding (W6): the binding rides the
+    /// log entry (self-contained replay) and enters the document state
+    /// hash. The binding is permanent for the log's lifetime (no unbind
+    /// verb in v1 — removing a clip leaves its binding; idempotent on
+    /// re-insert of the same id).
+    pub fn execute_insert_asset(
+        &mut self,
+        track: u64,
+        index: usize,
+        clip: ove_timeline::Clip,
+        asset: String,
+        owner: Owner,
+    ) -> Result<(), ProjectError> {
+        let cmd = Command::Insert {
+            track,
+            index,
+            clip: clip.clone(),
+        };
+        let inverse = self.timeline.apply(&cmd).map_err(ProjectError::Timeline)?;
+        let mut payload = LogPayload::of_command(&cmd);
+        if let LogPayload::Insert { asset: a, .. } = &mut payload {
+            *a = Some(asset);
+        } else {
+            return Err(ProjectError::Internal(
+                "execute_insert_asset on a non-insert command".into(),
+            ));
+        }
+        let entry = LogEntry {
+            seq: 0,
+            owner,
+            payload,
+            undo: Some(LogPayload::of_command(&inverse)),
+            nid: self.timeline.next_id_value(),
+        };
+        record_entry_bindings(&mut self.clip_assets, &entry);
         let seq = self.writer.append(entry)?;
         self.undo_stack.push(UndoStep {
             inverse,
@@ -420,7 +478,8 @@ impl Project {
     /// manifest hint. A crash at ANY point leaves a loadable project.
     pub fn snapshot(&mut self) -> Result<u64, ProjectError> {
         let seq = self.writer.next_seq() - 1; // everything ≤ seq is folded
-        let mirror = state::StateMirror::from_timeline(&self.timeline);
+        let mut mirror = state::StateMirror::from_timeline(&self.timeline);
+        mirror.clip_assets = self.clip_assets.clone();
         let hash = mirror.state_hash();
 
         let snap_dir = self.dir.join("snapshot");
@@ -574,12 +633,20 @@ impl Project {
         Ok((good.len() as u64, quarantine))
     }
 
+    /// Bind a clip to an asset (W6): recorded on the NEXT insert via
+    /// `execute_insert_asset`, or directly here for API symmetry. Document
+    /// state — hashed.
+    pub fn clip_assets(&self) -> &BTreeMap<u64, String> {
+        &self.clip_assets
+    }
+
     // -- internals ------------------------------------------------------------
 
     fn touch_manifest(&mut self) -> Result<(), ProjectError> {
         self.manifest.state.log_len = self.writer.next_seq() - 1;
-        self.manifest.state.state_hash =
-            state::StateMirror::from_timeline(&self.timeline).state_hash();
+        let mut mirror = state::StateMirror::from_timeline(&self.timeline);
+        mirror.clip_assets = self.clip_assets.clone();
+        self.manifest.state.state_hash = mirror.state_hash();
         self.manifest.store(&self.dir.join("manifest.json"))
     }
 }
@@ -654,6 +721,19 @@ fn replay_entry(
 
 fn matches_seqs(a: u64, b: u64) -> bool {
     a == b
+}
+
+/// Binding bookkeeping for one entry (used by execute AND replay so both
+/// paths maintain the map identically).
+fn record_entry_bindings(map: &mut BTreeMap<u64, String>, entry: &LogEntry) {
+    if let LogPayload::Insert {
+        clip,
+        asset: Some(hash),
+        ..
+    } = &entry.payload
+    {
+        map.insert(clip.id, hash.clone());
+    }
 }
 
 // ReplayStacks is used implicitly via the destructured parameters above.

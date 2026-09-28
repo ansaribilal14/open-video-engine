@@ -260,3 +260,126 @@ fn w5_undo_redo_reopen() {
         "undo history rebuilt by replay"
     );
 }
+
+// ---------------------------------------------------------------------------
+// W6 milestone: real video → probe → registry → hash → commands → mapping →
+// decode → FrameEnvelope → RenderPlan → software render → encode/mux →
+// valid MP4 → ffprobe verify → save → kill → reopen → SAME hash → re-export
+// semantically identical. TWO sources (multi-rate: 24 fps + ntsc 29.97).
+// ---------------------------------------------------------------------------
+
+fn w6_copy_fixture(name: &str) -> PathBuf {
+    media(name)
+}
+
+#[test]
+fn w6_vertical_slice_milestone() {
+    let dir = tmp("w6-milestone");
+    let mut e = Engine::create(&dir, (24_000, 1)).expect("create");
+    e.add_track(1, ove_timeline::TrackKind::Gap(GapTrack::new()))
+        .expect("track 1");
+    e.add_track(2, ove_timeline::TrackKind::Gap(GapTrack::new()))
+        .expect("track 2");
+
+    // import two multi-rate sources
+    let h24 = e
+        .import_media(&w6_copy_fixture("copy24.mp4"))
+        .expect("import 24");
+    let hntsc = e
+        .import_media(&w6_copy_fixture("copyntsc.mp4"))
+        .expect("import ntsc");
+    assert_ne!(h24, hntsc, "content hashes are identities");
+
+    // bindings ride the log: track 1 = copy24 [0,2s); track 2 = ntsc [2,3.5s)
+    // (composited OVER track 1 by layer order), then copy24 [3,5s) again.
+    // Timeline (24000 tick axis):
+    //   t [0, 2s):       clip 1 (copy24 src [0,2s))      — track 1
+    //   t [2s, 3.5s):    clip 2 (ntsc   src [0,1.5s))    — track 2 (top)
+    //   t [3.5s, 5s):    clip 3 (copy24 src [3,4.5s))    — track 1
+    e.add_clip(1, &h24, Rational::new(48_000, 24_000), Rational::new(0, 1))
+        .expect("clip 1");
+    e.add_clip(
+        2,
+        &hntsc,
+        Rational::new(36_000, 24_000),
+        Rational::new(0, 1),
+    )
+    .expect("clip 2");
+    e.add_clip(
+        1,
+        &h24,
+        Rational::new(36_000, 24_000),
+        Rational::new(72_000, 24_000),
+    )
+    .expect("clip 3");
+
+    // render from EACH source (multi-source proof):
+    let output = output_spec(320, 240);
+    let f0 = e
+        .render_frame(&output, Rational::new(0, 1))
+        .expect("render t=0 (copy24)");
+    let f_mid = e
+        .render_frame(&output, Rational::new(60_000, 24_000)) // t=2.5 s → ntsc
+        .expect("render t=2.5s (ntsc)");
+    let f_tail = e
+        .render_frame(&output, Rational::new(96_000, 24_000)) // t=4 s → copy24
+        .expect("render t=4s (copy24)");
+    for f in [&f0, &f_mid, &f_tail] {
+        assert_eq!(f.pixel_format, PixelFormat::Rgba);
+        assert!(f.cpu_bytes().expect("payload").data.iter().any(|&b| b != 0));
+    }
+
+    // export the whole 5 s span: 120 frames @ 24 fps
+    let out = dir.join("milestone.mp4");
+    const N: i64 = 120;
+    let info = e
+        .export_reencode(&out, &output, N)
+        .expect("export milestone");
+    assert_eq!(info.tracks[0].nb_frames, Some(N as u64));
+    assert_eq!(info.tracks[0].duration, Some(Rational::new(5, 1)));
+    // save → kill → reopen → SAME state hash
+    let live = e.state_hash();
+    drop(e);
+    let mut r = Engine::open(&dir).expect("reopen");
+    assert_eq!(r.state_hash(), live, "W6: reopen hash == live hash");
+    assert_eq!(r.project().clip_assets().len(), 3, "bindings survived");
+
+    // re-export → semantically identical (deterministic SW path: byte-equal)
+    let out2 = dir.join("milestone-2.mp4");
+    let info2 = r.export_reencode(&out2, &output, N).expect("re-export");
+    assert_eq!(info2.tracks[0].nb_frames, Some(N as u64));
+    assert_eq!(
+        info.file_sha256, info2.file_sha256,
+        "W6: re-export byte-identical (deterministic SW pipeline)"
+    );
+
+    // ffprobe eye on the milestone output
+    if ffprobe_available() {
+        let j = ffprobe_json(&out).expect("ffprobe parses milestone output");
+        assert_eq!(j["streams"][0]["codec_name"], "mpeg4");
+        assert_eq!(
+            j["streams"][0]["nb_frames"]
+                .as_str()
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            N as u64
+        );
+    }
+}
+
+fn ffprobe_available() -> bool {
+    std::process::Command::new("ffprobe")
+        .arg("-version")
+        .output()
+        .is_ok()
+}
+
+fn ffprobe_json(path: &Path) -> Option<serde_json::Value> {
+    let out = std::process::Command::new("ffprobe")
+        .args(["-v", "error", "-show_streams", "-of", "json"])
+        .arg(path)
+        .output()
+        .ok()?;
+    serde_json::from_str(&String::from_utf8(out.stdout).ok()?).ok()
+}
