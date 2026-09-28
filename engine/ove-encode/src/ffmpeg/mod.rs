@@ -15,10 +15,12 @@ use ove_time::Rational;
 
 use crate::{EncodeError, MuxError};
 
+pub mod aac;
 pub mod copy;
 pub mod encoder;
 pub mod muxer;
 
+pub use aac::FfmpegAacEncoder;
 pub use copy::{FfmpegCopySource, ParsedStream};
 pub use encoder::FfmpegSwEncoder;
 pub use muxer::FfmpegMuxer;

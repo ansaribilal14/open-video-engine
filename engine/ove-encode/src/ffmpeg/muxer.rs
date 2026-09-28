@@ -112,6 +112,12 @@ unsafe fn build_stream(fmt: *mut sys::AVFormatContext, t: &TrackSpec) -> Result<
             })?;
         }
     }
+    if t.initial_padding > 0 {
+        // Codec priming delay (AAC encoder delay, ADR-018): movenc writes the
+        // trim edit list from this, keeping the FILE duration sample-exact
+        // even though the raw packets carry the padded pre-roll.
+        (*par).initial_padding = t.initial_padding as c_int;
+    }
     if !t.extradata.is_empty() {
         // codecpar owns its extradata buffer (av_freep'd by
         // avformat_free_context) — deep copy, never alias.

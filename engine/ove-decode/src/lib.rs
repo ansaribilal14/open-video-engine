@@ -71,6 +71,20 @@ pub struct DecoderCaps {
     pub max_bit_depth: ove_media::BitDepth,
     /// Internal threading (FFmpeg thread_count).
     pub threaded: bool,
+    /// Audio session facts (W7): canonical decoded PCM surface. `None` for
+    /// video sessions. The decode adapter delivers planar f32 ("fltp") at
+    /// the SOURCE rate/layout — swresample format conversion only, never a
+    /// resample (sample count is preserved exactly; ADR-018).
+    pub audio: Option<AudioCapsInfo>,
+}
+
+/// Declared audio surface of a decoder session (W7).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AudioCapsInfo {
+    pub sample_rate: u32,
+    pub channels: u32,
+    /// Always "fltp" for the v1 software adapter (canonical decoded PCM).
+    pub sample_format: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

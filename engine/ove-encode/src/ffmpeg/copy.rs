@@ -53,6 +53,9 @@ pub struct ParsedStream {
     pub extradata: Vec<u8>,
     /// Stream duration on the source axis (0 when undeclared).
     pub stream_end: Rational,
+    /// Codec priming delay in samples (AAC; carried into the muxer TrackSpec
+    /// so the container writes the trim edit list — W7/ADR-018).
+    pub initial_padding: i64,
 }
 
 impl ParsedStream {
@@ -100,6 +103,7 @@ impl ParsedStream {
             timescale,
             kind,
             extradata: self.extradata.clone(),
+            initial_padding: self.initial_padding,
         })
     }
 }
@@ -323,6 +327,7 @@ impl FfmpegCopySource {
                     color: map_color_tags(par),
                     extradata,
                     stream_end,
+                    initial_padding: (*par).initial_padding as i64,
                 });
             }
             Ok(FfmpegCopySource { ctx, streams })

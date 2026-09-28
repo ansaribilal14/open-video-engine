@@ -15,7 +15,7 @@ use super::{
     close_input, last_error, map_color, map_pixel_format, open_input, stream_facts,
     ticks_to_rational,
 };
-use crate::{DecodeConfig, DecodeError, Decoder, DecoderCaps, HwAccel, SeekMode};
+use crate::{AudioCapsInfo, DecodeConfig, DecodeError, Decoder, DecoderCaps, HwAccel, SeekMode};
 
 /// libc EAGAIN on Linux; the conformance corpus runs on Linux (CI + sandbox).
 const EAGAIN: c_int = 11;
@@ -61,6 +61,14 @@ pub struct FfmpegSwDecoder {
     pixel_format: PixelFormat,
     bit_depth: BitDepth,
     format_sys_id: sys::AVPixelFormat,
+    /// W7 audio session: swresample context converting decoded audio to the
+    /// canonical planar-f32 ("fltp") surface at the UNCHANGED source
+    /// rate/layout (format conversion only — never a resample, so the
+    /// sample count is preserved exactly; ADR-018). Null for video sessions.
+    swr: *mut sys::SwrContext,
+    /// Declared audio surface; `None` = video session (all video paths
+    /// unchanged from W2..W6).
+    audio: Option<AudioCapsInfo>,
 }
 
 // Raw-pointer session; sending the session across threads is fine, sharing it
@@ -70,6 +78,9 @@ unsafe impl Send for FfmpegSwDecoder {}
 impl Drop for FfmpegSwDecoder {
     fn drop(&mut self) {
         unsafe {
+            if !self.swr.is_null() {
+                sys::swr_free(&mut self.swr);
+            }
             sys::av_frame_free(&mut self.frame);
             sys::av_packet_free(&mut self.packet);
             sys::avcodec_free_context(&mut self.codec_ctx);
@@ -118,10 +129,8 @@ impl Decoder for FfmpegSwDecoder {
             }
         };
         if facts.kind == StreamKind::Audio {
-            close_input(&mut ctx);
-            return Err(DecodeError::Unsupported(
-                "audio decode is out of Wave-2 scope (typed rejection; see STATUS)".into(),
-            ));
+            // W7 audio leg: canonical planar-f32 delivery (ADR-018).
+            return Self::open_audio(ctx, stream, cfg, &facts);
         }
         if facts.kind != StreamKind::Video {
             close_input(&mut ctx);
@@ -208,6 +217,7 @@ impl Decoder for FfmpegSwDecoder {
             pixel_formats: vec![mapped.ours.clone()],
             max_bit_depth: mapped.bit_depth,
             threaded: cfg.thread_count > 1,
+            audio: None,
         };
 
         let packet = unsafe { sys::av_packet_alloc() };
@@ -240,6 +250,8 @@ impl Decoder for FfmpegSwDecoder {
             pixel_format: mapped.ours,
             bit_depth: mapped.bit_depth,
             format_sys_id: mapped.sys_id,
+            swr: std::ptr::null_mut(),
+            audio: None,
         })
     }
 
@@ -305,6 +317,12 @@ impl Decoder for FfmpegSwDecoder {
         loop {
             let rc = unsafe { sys::avcodec_receive_frame(self.codec_ctx, self.frame) };
             if rc == 0 {
+                // decoders may emit empty audio frames at flush boundaries;
+                // they carry no samples and no independent pts — skip them.
+                if self.audio.is_some() && unsafe { (*self.frame).nb_samples } == 0 {
+                    unsafe { sys::av_frame_unref(self.frame) };
+                    continue;
+                }
                 let pts_ticks = unsafe { (*self.frame).pts };
                 if pts_ticks < 0 {
                     unsafe { sys::av_frame_unref(self.frame) };
@@ -317,14 +335,31 @@ impl Decoder for FfmpegSwDecoder {
                         return Err(DecodeError::Corrupt("pts out of rational range".into()));
                     }
                 };
-                // D-4 drop-until: skip frames strictly before the Exact target
+                // D-4 drop-until. VIDEO: skip frames strictly before the
+                // Exact target. AUDIO (W7, ADR-018): the floor+trim policy —
+                // whole frames whose END is ≤ target are dropped, but the
+                // frame STRADDLING the target is delivered whole (the caller
+                // trims the exact sample in-point); dropping it would lose
+                // samples and break sample-exact assembly.
                 if let Some(target) = self.drop_until {
-                    if pts < target {
+                    let drop_it = match self.audio.as_ref() {
+                        Some(info) => {
+                            let nb = unsafe { (*self.frame).nb_samples } as i64;
+                            let end = pts + Rational::new(nb, info.sample_rate as i64);
+                            end <= target
+                        }
+                        None => pts < target,
+                    };
+                    if drop_it {
                         unsafe { sys::av_frame_unref(self.frame) };
                         continue;
                     }
                 }
-                let env = self.build_frame(pts)?;
+                let env = if self.audio.is_some() {
+                    self.build_audio_frame(pts)?
+                } else {
+                    self.build_frame(pts)?
+                };
                 unsafe { sys::av_frame_unref(self.frame) };
                 return Ok(Some(env));
             }
@@ -357,10 +392,174 @@ impl Decoder for FfmpegSwDecoder {
 }
 
 impl FfmpegSwDecoder {
+    /// W7 audio open: codec context + the canonical-fltp swresample setup.
+    /// Self-contained so the video path above is untouched (regression
+    /// surface = zero for W2..W6 decode conformance).
+    fn open_audio(
+        mut ctx: *mut sys::AVFormatContext,
+        stream: StreamId,
+        cfg: DecodeConfig,
+        _facts: &super::StreamFacts,
+    ) -> Result<Self, DecodeError> {
+        let st = unsafe { *(*ctx).streams.add(stream.0 as usize) };
+        let par = unsafe { (*st).codecpar };
+        let rate = unsafe { (*par).sample_rate };
+        let channels = unsafe { (*par).ch_layout.nb_channels };
+        if rate <= 0 || channels <= 0 {
+            close_input(&mut ctx);
+            return Err(DecodeError::Unsupported(
+                "audio stream without sample rate / channel count".into(),
+            ));
+        }
+
+        let codec = unsafe { sys::avcodec_find_decoder((*par).codec_id) };
+        if codec.is_null() {
+            close_input(&mut ctx);
+            return Err(DecodeError::Unsupported(
+                "no libavcodec audio decoder".into(),
+            ));
+        }
+        let mut codec_ctx = unsafe { sys::avcodec_alloc_context3(codec) };
+        if codec_ctx.is_null() {
+            close_input(&mut ctx);
+            return Err(DecodeError::Io("avcodec_alloc_context3 failed".into()));
+        }
+        let rc = unsafe { sys::avcodec_parameters_to_context(codec_ctx, par) };
+        if rc < 0 {
+            unsafe { sys::avcodec_free_context(&mut codec_ctx) };
+            close_input(&mut ctx);
+            return Err(DecodeError::Corrupt(last_error(rc)));
+        }
+        unsafe {
+            // exact time basis for decoded frames (FRAME_CONTRACT §3)
+            (*codec_ctx).pkt_timebase = (*st).time_base;
+            (*codec_ctx).thread_count = cfg.thread_count as c_int;
+        }
+        let rc = unsafe { sys::avcodec_open2(codec_ctx, codec, std::ptr::null_mut()) };
+        if rc < 0 {
+            unsafe { sys::avcodec_free_context(&mut codec_ctx) };
+            close_input(&mut ctx);
+            return Err(DecodeError::Unsupported(last_error(rc)));
+        }
+
+        // swresample: format conversion ONLY (fltp out, source fmt in; same
+        // rate, same layout) — a resample would break sample-count exactness
+        // and is therefore structurally impossible here (ADR-018).
+        let mut swr: *mut sys::SwrContext = std::ptr::null_mut();
+        let rc = unsafe {
+            sys::swr_alloc_set_opts2(
+                &mut swr,
+                &(*par).ch_layout,
+                sys::AVSampleFormat::AV_SAMPLE_FMT_FLTP,
+                rate,
+                &(*par).ch_layout,
+                // SAFETY: par.format was produced by libav as a valid
+                // AVSampleFormat discriminant for this audio stream
+                #[allow(clippy::missing_transmute_annotations)]
+                std::mem::transmute::<_, sys::AVSampleFormat>((*par).format),
+                rate,
+                0,
+                std::ptr::null_mut(),
+            )
+        };
+        if rc < 0 || swr.is_null() {
+            unsafe { sys::avcodec_free_context(&mut codec_ctx) };
+            close_input(&mut ctx);
+            return Err(DecodeError::Unsupported(format!(
+                "swr_alloc_set_opts2: {}",
+                last_error(rc)
+            )));
+        }
+        let rc = unsafe { sys::swr_init(swr) };
+        if rc < 0 {
+            unsafe {
+                sys::swr_free(&mut swr);
+                sys::avcodec_free_context(&mut codec_ctx);
+            }
+            close_input(&mut ctx);
+            return Err(DecodeError::Unsupported(format!(
+                "swr_init: {}",
+                last_error(rc)
+            )));
+        }
+
+        let mut seek_modes = vec![SeekMode::Exact];
+        if cfg.keyframe_index.is_some() {
+            seek_modes.push(SeekMode::Snap);
+        }
+        let caps = DecoderCaps {
+            hw: None,
+            seek_modes,
+            memory_outputs: vec![FrameMemory::Cpu],
+            pixel_formats: Vec::new(),
+            max_bit_depth: BitDepth::Other(0),
+            threaded: cfg.thread_count > 1,
+            audio: Some(AudioCapsInfo {
+                sample_rate: rate as u32,
+                channels: channels as u32,
+                sample_format: "fltp".into(),
+            }),
+        };
+        let packet = unsafe { sys::av_packet_alloc() };
+        let frame = unsafe { sys::av_frame_alloc() };
+        if packet.is_null() || frame.is_null() {
+            unsafe {
+                sys::swr_free(&mut swr);
+                sys::avcodec_free_context(&mut codec_ctx);
+            }
+            close_input(&mut ctx);
+            return Err(DecodeError::Io("av_packet/av_frame_alloc failed".into()));
+        }
+
+        Ok(FfmpegSwDecoder {
+            fmt_ctx: ctx,
+            codec_ctx,
+            stream_index: stream.0 as usize,
+            time_base: unsafe { (*st).time_base },
+            packet,
+            frame,
+            eof_sent: false,
+            drain_done: false,
+            drop_until: None,
+            snap_index: cfg.keyframe_index,
+            caps,
+            // audio frames are NOT pooled in v1 (tiny + variable size;
+            // ADR-018). The pool fields stay inert dummy values.
+            pool: FramePool::new(0),
+            pool_key: PoolKey::from_strides(
+                ove_media::PixelFormat::Other("fltp".into()),
+                0,
+                0,
+                &[],
+            ),
+            pool_strides: Vec::new(),
+            pool_bytes: 0,
+            cancelled: AtomicBool::new(false),
+            stream_id: stream,
+            width: 0,
+            height: 0,
+            pixel_format: ove_media::PixelFormat::Other("pcm-fltp".into()),
+            bit_depth: BitDepth::Other(0),
+            format_sys_id: sys::AVPixelFormat::AV_PIX_FMT_NONE,
+            swr,
+            audio: Some(AudioCapsInfo {
+                sample_rate: rate as u32,
+                channels: channels as u32,
+                sample_format: "fltp".into(),
+            }),
+        })
+    }
+
     /// Reclaim a consumed frame's CPU bytes into the pool (visible, checked).
     /// Holding a frame across a pool recycle is the contract's stale-hold bug;
     /// the generation tag makes it detectable (FRAME_CONTRACT §5.2).
+    /// Video sessions only — W7 audio frames are not pooled (ADR-018).
     pub fn reclaim(&mut self, frame: FrameEnvelope) -> Result<(), DecodeError> {
+        if self.audio.is_some() {
+            return Err(DecodeError::Internal(
+                "reclaim is video-pool only; audio frames are not pooled (W7)".into(),
+            ));
+        }
         let gen = frame.generation;
         let data = match frame.cpu_bytes() {
             Some(FrameBytes { data, .. }) => data.clone(),
@@ -438,6 +637,58 @@ impl FfmpegSwDecoder {
                 generation,
             ))
         }
+    }
+
+    /// W7: convert the already-received audio AVFrame to the canonical
+    /// planar-f32 surface and deliver it as an audio FrameEnvelope.
+    /// Duration = nb_samples/rate EXACT (FRAME_CONTRACT §3.2) — the
+    /// container's per-frame duration field is never trusted for audio.
+    fn build_audio_frame(&mut self, pts: Rational) -> Result<FrameEnvelope, DecodeError> {
+        let info = match self.audio.as_ref() {
+            Some(i) => i.clone(),
+            None => return Err(DecodeError::Internal("audio frame in video session".into())),
+        };
+        let nb = unsafe { (*self.frame).nb_samples } as usize;
+        if nb == 0 {
+            return Err(DecodeError::Corrupt("empty audio frame".into()));
+        }
+        let ch = info.channels as usize;
+        // planar f32: one plane per channel, compact layout (stride = nb*4)
+        let mut out = vec![0u8; ch * nb * 4];
+        let mut planes: Vec<*mut u8> = (0..ch)
+            .map(|c| unsafe { out.as_mut_ptr().add(c * nb * 4) })
+            .collect();
+        let got = unsafe {
+            sys::swr_convert(
+                self.swr,
+                planes.as_mut_ptr(),
+                nb as c_int,
+                (*self.frame).extended_data as *const *const u8,
+                nb as c_int,
+            )
+        };
+        if got < 0 {
+            return Err(DecodeError::Corrupt(last_error(got)));
+        }
+        if got as usize != nb {
+            return Err(DecodeError::Corrupt(format!(
+                "audio conversion produced {got} of {nb} samples"
+            )));
+        }
+        let bytes = FrameBytes {
+            data: out,
+            strides: vec![nb * 4; ch],
+        };
+        Ok(FrameEnvelope::audio(
+            pts,
+            self.stream_id,
+            info.sample_rate,
+            info.channels,
+            nb,
+            bytes,
+            BackendId::FFmpegSw,
+            0,
+        ))
     }
 
     /// Read packets until one packet of our stream is fed to the decoder, or

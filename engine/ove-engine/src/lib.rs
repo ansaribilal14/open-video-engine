@@ -24,14 +24,14 @@ use std::path::Path;
 
 use ove_decode::ffmpeg::FfmpegSwDecoder;
 use ove_decode::{DecodeConfig, Decoder, SeekMode};
-use ove_encode::ffmpeg::{FfmpegCopySource, FfmpegMuxer, FfmpegSwEncoder};
+use ove_encode::ffmpeg::{FfmpegAacEncoder, FfmpegCopySource, FfmpegMuxer, FfmpegSwEncoder};
 use ove_encode::{
-    Container, Encoder, EncoderConfig, Muxer, OutputInfo, OutputSink, RateControl, VideoCodec,
-    VideoProfile,
+    AudioEncoder, Container, Encoder, EncoderConfig, Muxer, OutputInfo, OutputSink, RateControl,
+    VideoCodec, VideoProfile,
 };
 use ove_media::{
-    AssetRef, ColorTags, FrameEnvelope, FrameMemory, MatrixCoeffs, PixelFormat, Primaries,
-    ProbeInfo, Range, Transfer,
+    AssetRef, BackendId, ColorTags, FrameEnvelope, FrameMemory, MatrixCoeffs, PixelFormat,
+    Primaries, ProbeInfo, Range, Transfer,
 };
 use ove_project::{Owner, Project, ProjectError};
 use ove_render::{
@@ -63,6 +63,19 @@ pub enum EngineError {
     NoPlacement {
         at: Rational,
     },
+    /// The imported sources carry no audio stream (W7 export with audio).
+    NoAudioStream,
+    /// A requested audio cut does not land on a sample boundary at the
+    /// source rate (sample-exact contract, ADR-018).
+    NonExactSampleCut {
+        at: Rational,
+        rate: u32,
+    },
+    /// Retimed clips are video-only in v1; audio retiming (resampling) is a
+    /// named gap (ADR-018).
+    AudioRetimeUnsupported {
+        speed: Rational,
+    },
     Internal(String),
 }
 
@@ -79,6 +92,13 @@ impl std::fmt::Display for EngineError {
             EngineError::Mux(e) => write!(f, "mux: {e:?}"),
             EngineError::Seam(e) => write!(f, "seam: {e:?}"),
             EngineError::NoPlacement { at } => write!(f, "no placement covers t={at}"),
+            EngineError::NoAudioStream => write!(f, "no audio stream in the imported sources"),
+            EngineError::NonExactSampleCut { at, rate } => {
+                write!(f, "audio cut t={at} is not sample-exact at {rate} Hz")
+            }
+            EngineError::AudioRetimeUnsupported { speed } => {
+                write!(f, "audio retime x{speed} unsupported in v1 (named gap)")
+            }
             EngineError::Internal(d) => write!(f, "internal: {d}"),
         }
     }
@@ -101,6 +121,16 @@ impl From<ProjectError> for EngineError {
 pub struct SourceMedia {
     pub hash: ove_media::ContentHash,
     pub probe: ProbeInfo,
+}
+
+/// Assembled timeline audio (W7): the decode leg's canonical surface —
+/// planar f32, one plane per channel, exactly `samples` samples per plane.
+#[derive(Clone, Debug)]
+pub struct AudioAssembly {
+    pub planes: Vec<Vec<f32>>,
+    pub sample_rate: u32,
+    pub channels: u32,
+    pub samples: u64,
 }
 
 pub struct Engine {
@@ -397,16 +427,67 @@ impl Engine {
             enc.feed(frame).map_err(EngineError::Encode)?;
         }
         let packets = enc.drain().map_err(EngineError::Encode)?;
+
+        // W7 audio leg: when the sources carry audio, assemble the same
+        // timeline span sample-exactly and re-encode AAC (ENCODER_SPEC §3.3
+        // video re-encode route pairs with audio re-encode).
+        let mut audio_tracks: Vec<ove_encode::TrackSpec> = Vec::new();
+        let mut audio_packets: Vec<ove_encode::EncodedPacket> = Vec::new();
+        if self.first_audio_stream().is_some() {
+            let span = Rational::new(n_frames * output.rate_den, output.rate_num);
+            let assembly = self.assemble_timeline_audio(span)?;
+            let acfg = ove_encode::AudioEncoderConfig {
+                codec: ove_encode::AudioCodec::Aac,
+                sample_rate: assembly.sample_rate,
+                channels: assembly.channels,
+                rate: RateControl::Cbr { bitrate: 128_000 },
+                bitexact: true,
+            };
+            let mut aenc = FfmpegAacEncoder::configure(acfg).map_err(EngineError::Encode)?;
+            let atrack = aenc.track_spec().map_err(EngineError::Encode)?;
+            let rate = assembly.sample_rate as i64;
+            let ch = assembly.channels as usize;
+            const CHUNK: u64 = 4096;
+            let mut cursor: u64 = 0;
+            while cursor < assembly.samples {
+                let len = CHUNK.min(assembly.samples - cursor) as usize;
+                let stride = len * 4;
+                let mut data = Vec::with_capacity(stride * ch);
+                for plane in &assembly.planes {
+                    for v in &plane[cursor as usize..cursor as usize + len] {
+                        data.extend_from_slice(&v.to_le_bytes());
+                    }
+                }
+                let env = FrameEnvelope::audio(
+                    Rational::new(cursor as i64, rate),
+                    ove_media::StreamId(1),
+                    assembly.sample_rate,
+                    assembly.channels,
+                    len,
+                    ove_media::FrameBytes {
+                        data,
+                        strides: vec![stride; ch],
+                    },
+                    BackendId::FFmpegSw,
+                    0,
+                );
+                aenc.feed(env).map_err(EngineError::Encode)?;
+                cursor += len as u64;
+            }
+            audio_packets = aenc.drain().map_err(EngineError::Encode)?;
+            audio_tracks.push(atrack);
+        }
+
         let mut mux = FfmpegMuxer::open(
             OutputSink::File(out.to_path_buf()),
             Container::Mp4 {
                 faststart: true,
                 bitexact: true,
             },
-            vec![track],
+            vec![track].into_iter().chain(audio_tracks).collect(),
         )
         .map_err(EngineError::Mux)?;
-        for p in packets {
+        for p in packets.into_iter().chain(audio_packets) {
             mux.write(p).map_err(EngineError::Mux)?;
         }
         mux.finalize().map_err(EngineError::Mux)
@@ -498,6 +579,248 @@ impl Engine {
         let _ = n;
         let info = mux.finalize().map_err(EngineError::Mux)?;
         Ok((info, snaps))
+    }
+
+    // -- W7 audio: assembly + WAV/AAC export (ADR-018) --------------------------
+
+    /// The first imported source's first audio stream, if any.
+    fn first_audio_stream(&self) -> Option<ove_media::ProbeStream> {
+        for media in self.sources.values() {
+            if let Some(a) = media
+                .probe
+                .streams
+                .iter()
+                .find(|s| s.kind == ove_media::StreamKind::Audio)
+            {
+                return Some(a.clone());
+            }
+        }
+        None
+    }
+
+    /// The first track's timeline span (end of its last placement).
+    fn first_track_span(&self) -> Result<Rational, EngineError> {
+        use ove_timeline::mapping::ClipWindow;
+        let Some(tid) = self.project.timeline().track_ids().min() else {
+            return Err(EngineError::NoAudioStream);
+        };
+        let track = self
+            .project
+            .timeline()
+            .track_ref(tid)
+            .map_err(EngineError::Timeline)?;
+        let mut end = Rational::zero(1);
+        track.walk(&mut |_pos, start, clip: &Clip| {
+            let w = ClipWindow::from_clip(clip, start);
+            let e = w.timeline_start + w.dur;
+            if e > end {
+                end = e;
+            }
+        });
+        Ok(end)
+    }
+
+    /// Assemble the timeline audio for the FIRST track's clips (v1: single
+    /// audio lane following the video placements; multi-track mixing is a
+    /// named gap — ADR-018). Sample-exact: every cut lands on a sample
+    /// boundary of the source rate and the assembly is the concatenation of
+    /// per-clip sample ranges. NO resampling — speed ≠ 1 is a typed error.
+    ///
+    /// `timeline_span` is the span authority: the result is EXACTLY
+    /// span × rate samples (sources must cover it; short sources are a
+    /// typed error, never a silent pad).
+    pub fn assemble_timeline_audio(
+        &mut self,
+        timeline_span: Rational,
+    ) -> Result<AudioAssembly, EngineError> {
+        use ove_timeline::mapping::ClipWindow;
+
+        let Some(audio) = self.first_audio_stream() else {
+            return Err(EngineError::NoAudioStream);
+        };
+        let rate = audio.audio.as_ref().map(|a| a.sample_rate).unwrap_or(0);
+        let channels = audio.audio.as_ref().map(|a| a.channels).unwrap_or(0);
+        if rate == 0 || channels == 0 {
+            return Err(EngineError::NoAudioStream);
+        }
+        let span_r = timeline_span * Rational::new(rate as i64, 1);
+        if span_r.den() != 1 || span_r.num() < 0 {
+            return Err(EngineError::NonExactSampleCut {
+                at: timeline_span,
+                rate,
+            });
+        }
+        let want_total: u64 = span_r.num() as u64;
+
+        // placements of the first track (the v1 audio lane), validated
+        // BEFORE any decoding (typed errors, never mid-walk panics)
+        let Some(tid) = self.project.timeline().track_ids().min() else {
+            return Err(EngineError::NoAudioStream);
+        };
+        let track = self
+            .project
+            .timeline()
+            .track_ref(tid)
+            .map_err(EngineError::Timeline)?;
+        let mut placements: Vec<(ClipWindow, u64, u64)> = Vec::new(); // (window, n0, n1)
+        track.walk(&mut |_pos, start, clip: &Clip| {
+            let window = ClipWindow::from_clip(clip, start);
+            if window.speed != Rational::new(1, 1) {
+                // propagate after the walk (the closure cannot return Err)
+                placements.push((window, u64::MAX, u64::MAX));
+                return;
+            }
+            let n0r = window.src_in * Rational::new(rate as i64, 1);
+            let n1r = (window.src_in + window.src_dur()) * Rational::new(rate as i64, 1);
+            placements.push((
+                window,
+                if n0r.den() == 1 {
+                    n0r.num() as u64
+                } else {
+                    u64::MAX
+                },
+                if n1r.den() == 1 {
+                    n1r.num() as u64
+                } else {
+                    u64::MAX
+                },
+            ));
+        });
+        for (window, n0, n1) in &placements {
+            if window.speed != Rational::new(1, 1) {
+                return Err(EngineError::AudioRetimeUnsupported {
+                    speed: window.speed,
+                });
+            }
+            if *n0 == u64::MAX || *n1 == u64::MAX {
+                return Err(EngineError::NonExactSampleCut {
+                    at: window.src_in,
+                    rate,
+                });
+            }
+        }
+
+        // per-clip cuts, concatenated (clips are sequential on the track)
+        let mut planes: Vec<Vec<f32>> = vec![Vec::new(); channels as usize];
+        let mut produced: u64 = 0;
+        for (_window, n0, n1) in &placements {
+            if produced >= want_total {
+                break;
+            }
+            let want = (*n1 - *n0).min(want_total - produced);
+            let piece = self.cut_source_samples(&audio, *n0, want)?;
+            if piece.samples != want {
+                return Err(EngineError::Internal(format!(
+                    "audio source exhausted: {} of {want} samples",
+                    piece.samples
+                )));
+            }
+            produced += piece.samples;
+            for (plane, target) in piece.planes.into_iter().zip(planes.iter_mut()) {
+                target.extend_from_slice(&plane);
+            }
+        }
+        if produced != want_total {
+            return Err(EngineError::Internal(format!(
+                "audio assembly produced {produced} of {want_total} samples"
+            )));
+        }
+        Ok(AudioAssembly {
+            planes,
+            sample_rate: rate,
+            channels,
+            samples: produced,
+        })
+    }
+
+    /// Cut exactly `want` samples of the (single) source starting at sample
+    /// index `n0` (floor frame + sample trim per ADR-018). `n0` and `want`
+    /// are sample-exact integers; the source must cover the range.
+    fn cut_source_samples(
+        &mut self,
+        audio: &ove_media::ProbeStream,
+        n0: u64,
+        want: u64,
+    ) -> Result<AudioAssembly, EngineError> {
+        let rate = audio.audio.as_ref().map(|a| a.sample_rate).unwrap_or(0);
+        let channels = audio.audio.as_ref().map(|a| a.channels).unwrap_or(0) as usize;
+        let media = self
+            .sources
+            .values()
+            .next()
+            .ok_or(EngineError::NoAudioStream)?
+            .clone();
+        let hex = media.hash.hex();
+        let asset_path = self.project.dir().join(format!("assets/{hex}/src.mp4"));
+        let asset =
+            AssetRef::from_path(&asset_path).map_err(|e| EngineError::Import(format!("{e}")))?;
+        let mut dec = FfmpegSwDecoder::open(&asset, audio.id, DecodeConfig::default())
+            .map_err(|e| EngineError::Import(format!("audio decode open: {e}")))?;
+        if n0 > 0 {
+            let src_in = Rational::new(n0 as i64, rate as i64);
+            dec.seek(src_in, SeekMode::Exact)
+                .map_err(|e| EngineError::Import(format!("audio seek: {e}")))?;
+        }
+        let mut planes: Vec<Vec<f32>> = vec![Vec::new(); channels];
+        let mut collected: u64 = 0;
+        while collected < want {
+            let Some(frame) = dec
+                .next()
+                .map_err(|e| EngineError::Import(format!("audio decode: {e}")))?
+            else {
+                break; // source exhausted; caller reports the shortfall
+            };
+            let nb_r = frame.duration * Rational::new(rate as i64, 1);
+            if nb_r.den() != 1 {
+                return Err(EngineError::Internal("non-integer audio frame".into()));
+            }
+            let nb = nb_r.num() as u64;
+            let frame_start_r = frame.pts * Rational::new(rate as i64, 1);
+            if frame_start_r.den() != 1 {
+                return Err(EngineError::NonExactSampleCut {
+                    at: frame.pts,
+                    rate,
+                });
+            }
+            let frame_start = frame_start_r.num() as u64;
+            // cut window inside this frame: [max(start, n0), min(end, n0+want))
+            let lo = frame_start.max(n0);
+            let hi = (frame_start + nb).min(n0 + want);
+            if hi > lo {
+                let fb = frame
+                    .cpu_bytes()
+                    .ok_or_else(|| EngineError::Internal("audio frame without payload".into()))?;
+                let stride = fb.strides[0];
+                for (ch, target) in planes.iter_mut().enumerate() {
+                    let plane = &fb.data[ch * stride..(ch + 1) * stride];
+                    let floats: &[f32] = unsafe {
+                        std::slice::from_raw_parts(plane.as_ptr().cast::<f32>(), nb as usize)
+                    };
+                    target.extend_from_slice(
+                        &floats[(lo - frame_start) as usize..(hi - frame_start) as usize],
+                    );
+                }
+                collected += hi - lo;
+            }
+            if frame_start + nb >= n0 + want {
+                break;
+            }
+        }
+        Ok(AudioAssembly {
+            planes,
+            sample_rate: rate,
+            channels: channels as u32,
+            samples: collected,
+        })
+    }
+
+    /// WAV/PCM export of the timeline audio (BUILD_PLAN wave 7: "mix →
+    /// WAV/PCM out"). Returns the sample frames written.
+    pub fn export_wav(&mut self, out: &Path) -> Result<u64, EngineError> {
+        let span = self.first_track_span()?;
+        let assembly = self.assemble_timeline_audio(span)?;
+        ove_encode::wav::write_wav_s16(out, &assembly.planes, assembly.sample_rate)
+            .map_err(EngineError::Encode)
     }
 
     fn first_video_geometry(&self) -> Result<(u32, u32, ColorTags), EngineError> {
