@@ -4,9 +4,9 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 2 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render — all landed)
-DATE: 2026-09-28
-COMMIT: this wave landed via PR #4 (merge hash recorded in the merge commit)
+WAVE: 3 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode — all landed)
+DATE: 2026-09-29
+COMMIT: this wave landed via PR #5 (merge hash recorded in the merge commit)
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
@@ -21,7 +21,55 @@ Prior session claims were re-verified from scratch before any new work:
   ove-decode (145 l + conformance/probe suites). Spec set re-read: PROJECT_
   FORMAT / ENCODER / DECODER / FRAME_CONTRACT / MEDIA_ENGINE.
 
-## WAVE 2 deltas (this session)
+## Session verification record (2026-09-29, fresh continuation #2)
+
+All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
+
+- HEAD `16d62a9` on main; baseline `33fde9d` IS an ancestor; tree clean.
+- GitHub Actions run 36395951181 on exact HEAD `16d62a9`: SUCCESS (3 jobs:
+  rust / audit / libav-confinement). All six recent runs SUCCESS.
+- Local (system FFmpeg 7.1.5, unprivileged recipe per DEV_ENV.md, rustc
+  1.98.1): 84/84 tests GREEN · fmt GREEN · clippy -D warnings GREEN.
+- Source inventory re-counted: 4,223 l (ove-time 378, ove-timeline 1,611,
+  ove-media 1,332, ove-decode 145+suites, ove-render 643).
+
+## WAVE 3 deltas (2026-09-29, PR #5)
+
+1. **ove-encode created** (workspace member 6): ENCODER_SPEC §1 traits —
+   `Encoder` (configure/feed/drain + the recorded `track_spec()` extension),
+   `Muxer` (open/write/finalize), `EncodedPacket` with checkpoint fields;
+   pure export planner (`planner.rs`): keyframe-aligned StreamCopy vs
+   ReEncode vs Mixed segmentation, snaps always reported (receipt), audio
+   grid alignment; FFmpeg adapter (`ffmpeg/`): `FfmpegSwEncoder` (native
+   mpeg4, swscale RGB→YUV420P declared-conversion path), `FfmpegMuxer`
+   (MP4, faststart + bitexact options, exact tick conversion against the
+   EFFECTIVE post-header axis), `FfmpegCopySource` (packet-level demux,
+   keyframe-floor landing, 0-start shift, byte-identical passthrough).
+2. **Tests 28 new (workspace 112/112 green)**: planner P01–P10 (pure logic:
+   snap table, RoundIn validity, ToEof, 23.976 exactness, audio grid,
+   mixed coverage, shapes); conformance E-1..E-5 + E-7/E-7b/E-7c + H1–H5 —
+   outputs verified through ffprobe CLI (when present), libav probe, and
+   decoded-pixel equality; copy-route byte-identity to source GOP range
+   (E-007 §3.4) pinned at both packet and pixel level; committed corpus
+   (copy24/copyav/copyntsc + golden tables) via
+   `scripts/corpus/gen_encode_corpus.py`; byte golden
+   `encode_golden.json` keyed on the producing libav identity (7.1.5-0+
+   deb13u1), same-run determinism asserted everywhere.
+3. **ADR-015** records the v1 decisions: confinement restated as CLOSED
+   adapter allowlist {ove-decode, ove-encode} (check script amended and
+   green), mpeg4-first codec surface (OpenH264/SVT-AV1 typed Unsupported),
+   snap semantics made normative, movenc timescale-widening (24→12288)
+   handled by effective-axis conversion, 0-duration packets → None, mp4
+   AVIO caller-ownership (the AVFMT_NOFILE inversion SEGFAULT class, found
+   and pinned by tests), version-keyed byte goldens with explicit reported
+   skips. ADR-005 promoted PROPOSED → ACCEPTED (v1 surface landed).
+4. **Bugs found & fixed in-wave** (each now test-pinned): mixed-axis tick
+   conversion after movenc widening; stale pict_type=I on the reused
+   encoder frame forcing all-intra; codec 0-duration corrupting stts;
+   non-refcounted packet aliasing; test fixture pts bug (24k s frames) —
+   caught because e2b passed while e2/e3 failed.
+
+## WAVE 2 deltas (2026-09-28)
 
 1. **ove-render created** (workspace member 5): software reference renderer
    per RENDER_GRAPH_SPEC — plan.rs (RenderPlan/Pass/PassKind + canonical
@@ -103,16 +151,19 @@ Prior session claims were re-verified from scratch before any new work:
 
 | Crate | State | Evidence |
 |---|---|---|
-| ove-time | TESTED — 9 unit + 18 property (P1–P12 + recip/ceil) | 77/77 local (2026-09-28) + CI |
+| ove-time | TESTED — 9 unit + 18 property (P1–P12 + recip/ceil) | 112/112 workspace local (2026-09-29) + CI |
 | ove-timeline | TESTED — 10 properties (AVL primary, ADR-011) + 7 seam properties (S0–S6, ADR-013) | CI + local; bench in ADR-011 |
 | ove-media | TESTED — 13 unit (asset hash, FrameEnvelope, pool, probe types) | CI + local |
 | ove-decode | TESTED — 14 conformance (D-1..D-12) + 6 probe; libav confined | CI + local, both system and bundled libav |
-| ove-render | TESTED — RG-1..RG-7 (purity, goldens, layer order, retime, split continuity, optimizer safety, color) | 84/84 local (2026-09-28) + CI; ADR-014 |
-| ove-encode / ove-project / ove-engine / ove-cli | PLANNED (waves 3–5 per ENGINE_BUILD_PLAN) | — |
+| ove-render | TESTED — RG-1..RG-7 (purity, goldens, layer order, retime, split continuity, optimizer safety, color) | CI + local; ADR-014 |
+| ove-encode | TESTED — P01–P10 planner + E-1..E-5/E-7/H1–H5 conformance (28 tests; ffprobe/libav/pixel-verified, goldens committed) | 112/112 workspace local (2026-09-29); ADR-015 |
+| ove-project / ove-engine / ove-cli | PLANNED (waves 4–5 per ENGINE_BUILD_PLAN) | — |
 
 ## Current research / architecture status
 
-- ADR-001/002/007/008/009/010/011/012/013/014 ACCEPTED; ADR-003/004/005/006
+- ADR-001/002/005/007/008/009/010/011/012/013/014/015 ACCEPTED
+  (005 promoted 2026-09-29, v1 surface landed; 015 encode leg v1);
+  ADR-003/004/006
   PROPOSED with named evidence legs. ADR-007: overflow policy; ADR-013: seam
   + dead-leg removal; ADR-014: software renderer v1.
 - 45 research docs + 137-source ledger + gates (13 UNDERSTOOD / 1 PARTIAL env-bound).
@@ -121,13 +172,15 @@ Prior session claims were re-verified from scratch before any new work:
 
 ## Current validation status
 
-- 84/84 workspace tests GREEN locally (system FFmpeg 7.1.5 path), fmt GREEN,
-  clippy -D warnings GREEN, after W2 changes (2026-09-28).
-- Bundled path: exercised by CI on the PR for this wave (same pure-Rust diff —
-  no libav interaction; PR run is the gate).
-- CI: ALL GREEN — W2 merge 32c15406 (run 36395655326), W1 merge 96763dcf
-  (run 36392979166), W0.6 merge 9383d14 (run 36391223192). PR runs:
-  36391084190 (PR #2), 36392782833 (PR #3), 36395480815 (PR #4).
+- 112/112 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
+  1.98.1), fmt GREEN, clippy -D warnings GREEN, after W3 (2026-09-29).
+- Bundled path: exercised by CI on this wave's PR (bundled libav now also
+  links swscale via the union feature set; portability guard scans the
+  same object tree; E-5 byte gate self-skips with an explicit report on a
+  different libav identity, structure gates always run).
+- CI: ALL GREEN through W2 (runs 36395655326 / 36392979166 /
+  36391223192; PRs 36391084190 / 36392782833 / 36395480815; HEAD run
+  36395951181). W3 PR #5 run: recorded at merge.
 
 ## Current CI state
 
@@ -141,18 +194,22 @@ Prior session claims were re-verified from scratch before any new work:
 
 ## Current open gaps (top)
 
-1. WAVE 3 ove-encode + mux + ExportPlanner (BUILD_PLAN W4; ffprobe-verified goldens).
-2. Mutation-style "test the tests" not yet systematic.
-3. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
-4. GitHub PAT used across chat sessions must be rotated by the owner
+1. WAVE 4 ove-project persistence (manifest + commands.jsonl + snapshot
+   compaction), then W5 ove-engine + ove-cli.
+2. AAC seam re-encode (audio wave W7); OpenH264/SVT-AV1 encoder legs;
+   E-6 kill-resume execution at segment granularity (checkpoint fields
+   exist).
+3. Mutation-style "test the tests" not yet systematic.
+4. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
+5. GitHub PAT used across chat sessions must be rotated by the owner
    (standing security rule, DEV_ENV.md) — outside engine scope, flagged.
-5. docs/VERTICAL_SLICE_TRACE.md (directive deliverable) not yet written —
+6. docs/VERTICAL_SLICE_TRACE.md (directive deliverable) not yet written —
    scheduled with W6 vertical slice when the chains exist end-to-end.
 
 ## Current wave order (directive §37, unchanged)
 
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
-3 encode+mux+export → 4 project → 5 engine+cli → 6 vertical slice →
+3 encode+mux+export ✓ → 4 project → 5 engine+cli → 6 vertical slice →
 7 audio → 8 keyframes → 9 GPU → 10–12 platforms → 13 conformance →
 14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
 19 perf → 20 docs/release → 21 production audit.
@@ -180,6 +237,15 @@ Prior session claims were re-verified from scratch before any new work:
   conversion, integer-translate geometry, FrameSource decoupling from
   ove-decode. Confidence 0.9. Reopen: intentional golden diff without
   byte-level note; scaling/affine need; stacked partial-coverage banding.
+- ADR-015 (2026-09-29): encode leg v1 — adapter allowlist {ove-decode,
+  ove-encode}; mpeg4-first codec surface; snap semantics normative
+  (RoundIn start validity, RoundOut/ToEof end, Mixed inner core);
+  effective-axis exact tick conversion; version-keyed byte goldens with
+  explicit skips; refcounted packets; mp4 AVIO caller-ownership.
+  Confidence 0.88. Reopen: a libav build whose movenc does NOT widen
+  timescales still passes (conversion is effective-axis based); an
+  encoder that needs B-frames forces the dts/ctts conversation; openh264
+  licensing form (external lib vs bundled) at its adapter leg.
 
 ## Unresolved decisions (registry)
 
@@ -189,10 +255,10 @@ Prior session claims were re-verified from scratch before any new work:
 
 ## Explicit next action
 
-WAVE 3 — ove-encode + muxer + ExportPlanner (BUILD_PLAN W4): Encoder trait
-(configure/feed/drain) + Muxer + stream-copy route chosen by the export
-planner (keyframe-aligned per E-007/E-007b); MP4 via FFmpeg LGPL inside an
-adapter crate (libav confinement holds); ffprobe-verified outputs — duration
-exactness (frame-exact), timestamps, codec tags; golden hashes committed.
-Land via PR with fmt/clippy/tests green, update this file, then WAVE 4
-(ove-project persistence: manifest + commands.jsonl + snapshot compaction).
+WAVE 4 — ove-project persistence (BUILD_PLAN W5): manifest.json
+(schema_version, tick axis, asset registry keyed by BLAKE3 content hash) +
+commands.jsonl (append-only command journal) + snapshot compaction; folds
+through ove-timeline commands (explicit IDs, exact inverses, state hash).
+Acceptance: save → kill -9 → reopen → replay → state hash == pre-kill hash.
+Land via PR with fmt/clippy/tests green, update this file, then WAVE 5
+(ove-engine + ove-cli integration slice).

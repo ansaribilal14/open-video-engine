@@ -3,6 +3,14 @@
 > Parent: ADR-005 as amended (ARCHITECTURE_AUDIT #2): muxing is separated from encoding;
 > stream-copy is an export *route*, not an "encoder mode". Directive: exported MP4 must be
 > inspectable with ffprobe; golden outputs committed.
+>
+> **Implemented (2026-09-29, ADR-015)**: `ove-encode` — §1 traits (with the
+> recorded `Encoder::track_spec()` extension), §3 route rules, §4 E-1..E-5
+> + E-7 gates (E-6 checkpoint fields exist; execution deferred), §5 muxer
+> rules (MP4 via libavformat in the adapter crate; libav confinement is now
+> a closed adapter allowlist {ove-decode, ove-encode}), §6 caps with
+> version-keyed goldens. v1 codec: native mpeg4 (LGPL, dependency-free);
+> OpenH264/SVT-AV1 = typed `Unsupported` until their legs land.
 
 ## 1. Types
 

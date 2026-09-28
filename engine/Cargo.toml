@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["ove-time", "ove-timeline", "ove-media", "ove-decode", "ove-render"]
+members = ["ove-time", "ove-timeline", "ove-media", "ove-decode", "ove-render", "ove-encode"]
 # Future members (join as they are created, per ENGINE_BUILD_PLAN waves):
-#   ove-encode (wave 4) - ove-project + ove-engine + ove-cli (wave 5)
+#   ove-project + ove-engine + ove-cli (wave 5)
 
 [workspace.package]
 edition = "2021"
