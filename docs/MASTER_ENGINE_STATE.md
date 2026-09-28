@@ -125,8 +125,9 @@ Prior session claims were re-verified from scratch before any new work:
   clippy -D warnings GREEN, after W2 changes (2026-09-28).
 - Bundled path: exercised by CI on the PR for this wave (same pure-Rust diff —
   no libav interaction; PR run is the gate).
-- CI: post-merge main runs ALL GREEN — 36391223192 (W0.6 merge 9383d14),
-  36304812153 (8b5aa81); W1 PR run to be recorded in the merge commit message.
+- CI: ALL GREEN — W2 merge 32c15406 (run 36395655326), W1 merge 96763dcf
+  (run 36392979166), W0.6 merge 9383d14 (run 36391223192). PR runs:
+  36391084190 (PR #2), 36392782833 (PR #3), 36395480815 (PR #4).
 
 ## Current CI state
 
