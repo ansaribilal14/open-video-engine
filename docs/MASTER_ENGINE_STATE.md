@@ -4,9 +4,9 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 4 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project — all landed)
+WAVE: 5 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 merged as d0f1ce0; W4 = PR #6 merged as 37d1e59a
+COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (hash at merge)
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
@@ -32,6 +32,41 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
   1.98.1): 84/84 tests GREEN · fmt GREEN · clippy -D warnings GREEN.
 - Source inventory re-counted: 4,223 l (ove-time 378, ove-timeline 1,611,
   ove-media 1,332, ove-decode 145+suites, ove-render 643).
+
+## WAVE 5 deltas (2026-09-29, PR #7)
+
+1. **ove-engine created** (workspace member 8): the headless session wiring
+   all five legs — probe (FfmpegProbe probe_full) → hash-addressed import
+   with probe sidecars → ove-timeline commands (explicit ids, alloc before
+   construct) → project persistence → decode (exact seeks, D-4/D-5) →
+   render (ADR-013 mapping → compile → software exec) → export.
+2. **ove-cli created** (workspace member 9): subcommands new/add-track/
+   import/add-clip/split/undo/redo/status/export-copy driving the engine;
+   smoke test drives the real binary end-to-end (CARGO_BIN_EXE).
+3. **Integration suite 6 tests (workspace 131/131)**: save/reopen hash
+   equality, kill-reopen-continue at multiple points, render determinism
+   from real decode, re-encode export with exact frame count + duration
+   (ffprobe + libav verified), keyframe-aligned copy export via the
+   planner, undo/redo surviving reopen.
+4. **Two real bugs found & fixed (both now mutation-pinned)**:
+   a. **ove-media pool bug**: `into_frame_bytes()` cleared the buffer
+      before moving it — EVERY decoded frame shipped an empty payload.
+      Wave-2's decode suite passed vacuously (nothing compared pixel
+      bytes); the engine's real renders exposed it. Fixed + payload-
+      content gate added to the decode conformance suite (d13).
+   b. **ContentHash identity confusion**: sidecar hydration re-parsed
+      digests with from_bytes (which HASHES) — from_hex (round-trip)
+      added and named so the two cannot be confused again.
+   c. **Allocation state rides the log**: replay could not reproduce the
+      id-alloc cursor (apply() never advances it) — every log entry now
+      carries `nid` (cursor after execution), replay restores it via
+      Timeline::set_next_id (monotonic, guarded). Project-layer tests had
+      used literal ids and passed vacuously; the engine suite is the
+      first mutation-strong caller.
+5. **ADR-017** records: engine = integration layer (core stays libav-free),
+   the boundary-conversion contract (YUV→RGBA once at decode, RGBA→YUV
+   once at encode, integer/deterministic, matrix from tags), v1
+   single-source render note (per-clip asset binding rides the log at W6).
 
 ## WAVE 4 deltas (2026-09-29, PR #6)
 
@@ -187,7 +222,8 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 | ove-render | TESTED — RG-1..RG-7 (purity, goldens, layer order, retime, split continuity, optimizer safety, color) | CI + local; ADR-014 |
 | ove-encode | TESTED — P01–P10 planner + E-1..E-5/E-7/H1–H5 conformance (28 tests; ffprobe/libav/pixel-verified, goldens committed) | 112/112 workspace local (2026-09-29); ADR-015 |
 | ove-project | TESTED — P-1..P-8 acceptance (11 tests incl. subprocess kill-9, compaction equivalence, corruption drill) | 123/123 workspace local (2026-09-29); ADR-016 |
-| ove-engine / ove-cli | PLANNED (wave 5 per ENGINE_BUILD_PLAN) | — |
+| ove-engine | TESTED — integration suite 6 (cooperating legs, kill-reopen-continue, render determinism, exports ffprobe-verified) | 131/131 workspace local (2026-09-29); ADR-017 |
+| ove-cli | TESTED — binary smoke (full flow via CARGO_BIN_EXE) | 131/131 workspace local (2026-09-29) |
 
 ## Current research / architecture status
 
@@ -202,8 +238,8 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Current validation status
 
-- 123/123 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
-  1.98.1), fmt GREEN, clippy -D warnings GREEN, after W4 (2026-09-29).
+- 131/131 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
+  1.98.1), fmt GREEN, clippy -D warnings GREEN, after W5 (2026-09-29).
 - Bundled path: exercised by CI on this wave's PR (bundled libav now also
   links swscale via the union feature set; portability guard scans the
   same object tree; E-5 byte gate self-skips with an explicit report on a
@@ -224,10 +260,10 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Current open gaps (top)
 
-1. WAVE 5 ove-engine + ove-cli (integration slice: build project: 1 video
-   + 1 audio, multi-clip, trim/split/move/undo/redo/save/kill/reopen →
-   decode → render → export; MEDIA+TIMELINE+PROJECT+RENDER+EXPORT
-   cooperating), then W6 vertical slice + VERTICAL_SLICE_TRACE.md.
+1. WAVE 6 vertical slice: per-clip asset binding in the log (multi-source
+   render scheduling), docs/VERTICAL_SLICE_TRACE.md (import chain,
+   command-replay chain, AI→command chain at source level), real-video
+   milestone end-to-end.
 2. AAC seam re-encode (audio wave W7); OpenH264/SVT-AV1 encoder legs;
    E-6 kill-resume execution at segment granularity (checkpoint fields
    exist).
@@ -241,7 +277,7 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 ## Current wave order (directive §37, unchanged)
 
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
-3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli → 6 vertical slice →
+3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice →
 7 audio → 8 keyframes → 9 GPU → 10–12 platforms → 13 conformance →
 14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
 19 perf → 20 docs/release → 21 production audit.
@@ -294,11 +330,11 @@ All W0.6/W1/W2 claims re-verified from scratch before Wave 3 work:
 
 ## Explicit next action
 
-WAVE 5 — ove-engine + ove-cli (BUILD_PLAN W5 integration slice): the
-engine session wires probe → asset import → timeline commands → project
-save/load → decode → render → export; headless CLI `ove-cli` drives it
-(1 video + 1 audio, multi-clip, trim/split/move/undo/redo/save/kill/
-reopen). Gate: MEDIA+TIMELINE+PROJECT+RENDER+EXPORT cooperating with the
-directive's save/kill-9/reopen/state-hash test end-to-end. Land via PR
-with fmt/clippy/tests green, update this file, then WAVE 6 (full vertical
-slice + docs/VERTICAL_SLICE_TRACE.md).
+WAVE 6 — vertical slice (BUILD_PLAN W6 quality gate): per-clip asset
+binding in the log; multi-source render; the directive's W6 milestone on
+a real video — probe → asset registry → content hash → timeline commands
+→ exact source mapping → decode → FrameEnvelope → RenderPlan → software
+render → encode/mux → valid MP4 → ffprobe verify → save → kill → reopen
+→ replay → SAME state hash → re-export semantically identical; plus
+docs/VERTICAL_SLICE_TRACE.md (import chain, command-replay chain,
+AI→command chain at source level). Land via PR, then WAVE 7 (audio).

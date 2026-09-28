@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["ove-time", "ove-timeline", "ove-media", "ove-decode", "ove-render", "ove-encode", "ove-project"]
-# Future members (join as they are created, per ENGINE_BUILD_PLAN waves):
-#   ove-engine + ove-cli (wave 5)
+members = ["ove-time", "ove-timeline", "ove-media", "ove-decode", "ove-render", "ove-encode", "ove-project", "ove-engine", "ove-cli"]
+# ove-project (wave 4) + ove-engine/ove-cli (wave 5) are the last members
+# of the BUILD_PLAN crate set.
 
 [workspace.package]
 edition = "2021"

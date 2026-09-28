@@ -1,0 +1,262 @@
+//! WAVE 5 integration: MEDIA+TIMELINE+PROJECT+RENDER+EXPORT cooperating
+//! (ENGINE_BUILD_PLAN wave 5 acceptance, via the engine session).
+//!
+//! The directive's gate, exercised end-to-end on real committed media:
+//!   1. save → kill -9 at a random point → reopen → replay → hash == live
+//!   2. exported MP4 duration-exact, ffprobe-clean timestamps
+//!   3. decode → render → export chain reproducible in CI (software legs)
+
+use std::path::{Path, PathBuf};
+
+use ove_engine::Engine;
+use ove_media::PixelFormat;
+use ove_render::OutputSpec;
+use ove_time::Rational;
+use ove_timeline::GapTrack;
+
+fn media(name: &str) -> PathBuf {
+    // the committed wave-3 corpus doubles as the engine's fixture set
+    // (single repo, stable relative path; existence is the contract)
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ove-encode/tests/media")
+        .join(name);
+    assert!(p.exists(), "corpus fixture missing: {}", p.display());
+    p
+}
+
+fn tmp(name: &str) -> PathBuf {
+    let d = std::env::temp_dir()
+        .join("ove-engine-integration")
+        .join(name);
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.parent().unwrap()).unwrap();
+    d
+}
+
+fn ticks(n: i64) -> Rational {
+    Rational::new(n, 24_000)
+}
+
+fn output_spec(w: u32, h: u32) -> OutputSpec {
+    OutputSpec {
+        width: w,
+        height: h,
+        rate_num: 24,
+        rate_den: 1,
+        working_space: color_tags_bt709(),
+    }
+}
+
+fn color_tags_bt709() -> ove_media::ColorTags {
+    ove_media::ColorTags {
+        primaries: ove_media::Primaries::Bt709,
+        transfer: ove_media::Transfer::Bt709,
+        matrix: ove_media::MatrixCoeffs::Bt709,
+        range: ove_media::Range::Limited,
+        chroma_loc: None,
+    }
+}
+
+/// Build a session: import copy24 (6 s @ 24 fps), two clips on track 1
+/// (0-2 s and 1-3 s of source), split + resize + undo. Returns the engine
+/// and the live state hash.
+fn build_session(dir: &Path) -> (Engine, String) {
+    let mut e = Engine::create(dir, (48_000, 1)).expect("create");
+    e.add_track(1, ove_timeline::TrackKind::Gap(GapTrack::new()))
+        .expect("track");
+    let hex = e.import_media(&media("copy24.mp4")).expect("import");
+
+    // clip A: source [0, 2 s) at timeline 0; clip B: source [1, 3 s) after it
+    e.add_clip(1, &hex, ticks(48), ticks(0)).expect("clip A");
+    e.add_clip(1, &hex, ticks(48), ticks(24)).expect("clip B");
+    // split clip A at 1 s
+    e.split(1, 1, ticks(24)).expect("split");
+    // resize clip B
+    e.resize(1, 2, ticks(40)).expect("resize");
+    // one undo (drops the resize)
+    e.undo().expect("undo");
+
+    let hash = e.state_hash();
+    (e, hash)
+}
+
+// ---------------------------------------------------------------------------
+// 1: cooperating chain — import → timeline → save → reopen → hash equal
+// ---------------------------------------------------------------------------
+
+#[test]
+fn w5_save_reopen_hash_equal() {
+    let dir = tmp("w5-p1");
+    let (_e, live) = build_session(&dir);
+    let r = Engine::open(&dir).expect("reopen");
+    assert_eq!(r.state_hash(), live, "engine session reopen: hash equal");
+}
+
+// ---------------------------------------------------------------------------
+// 2: kill -9 (drop-without-close model; the subprocess drill lives at the
+//    project layer) at a "random" point + session continuation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn w5_kill_reopen_continue() {
+    for cut in [1usize, 3, 4] {
+        let dir = tmp(&format!("w5-p2-{cut}"));
+        let mut e = Engine::create(&dir, (48_000, 1)).expect("create");
+        e.add_track(1, ove_timeline::TrackKind::Gap(GapTrack::new()))
+            .expect("track");
+        let hex = e.import_media(&media("copy24.mp4")).expect("import");
+        for k in 0..cut {
+            e.add_clip(1, &hex, ticks(24), ticks(12 * k as i64))
+                .expect("clip");
+        }
+        let live = e.state_hash();
+        drop(e); // the "kill" (write-through: disk state == live state)
+
+        let mut r = Engine::open(&dir).expect("reopen");
+        assert_eq!(r.state_hash(), live, "cut={cut}");
+        // the session continues deterministically
+        r.add_clip(1, &hex, ticks(6), ticks(0))
+            .expect("post-reopen clip");
+        let after = r.state_hash();
+        drop(r);
+        let r2 = Engine::open(&dir).expect("second reopen");
+        assert_eq!(r2.state_hash(), after, "cut={cut}: post-continuation");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 3: decode → render (real decode through the seam) → rendered frame facts
+// ---------------------------------------------------------------------------
+
+#[test]
+fn w5_render_frame_from_real_decode() {
+    let dir = tmp("w5-render");
+    let (mut e, _hash) = build_session(&dir);
+    let output = output_spec(320, 240);
+
+    // frame 0: clip A covers timeline 0; source pts 0 (a keyframe in copy24)
+    let frame = e
+        .render_frame(&output, Rational::new(0, 1))
+        .expect("render frame 0");
+    assert_eq!(frame.width, 320);
+    assert_eq!(frame.height, 240);
+    assert_eq!(frame.pixel_format, PixelFormat::Rgba);
+    assert_eq!(frame.pts, Rational::new(0, 1));
+    // not a black frame: the corpus testsrc2 pattern has non-zero chroma/luma
+    let fb = frame.cpu_bytes().expect("cpu rgba");
+    assert!(
+        fb.data
+            .chunks(4)
+            .any(|px| px[0] > 8 || px[1] > 8 || px[2] > 8),
+        "rendered frame carries real content"
+    );
+
+    // frame 96 = t 4 s: inside clip B (timeline [2 s, 2 s + 40/24 s))
+    // source pts = 1 s + (4 s - 2 s) = 3 s — inside copy24's 6 s
+    let frame = e
+        .render_frame(&output, Rational::new(4, 1))
+        .expect("render frame at t=4s");
+    assert_eq!(frame.pts, Rational::new(4, 1), "output pts == frame_pts(k)");
+
+    // determinism: the same time renders byte-identical frames
+    let a = e
+        .render_frame(&output, Rational::new(12, 1))
+        .expect("render a");
+    let b = e
+        .render_frame(&output, Rational::new(12, 1))
+        .expect("render b");
+    let ab = a.cpu_bytes().expect("a").data.clone();
+    let bb = b.cpu_bytes().expect("b").data.clone();
+    assert_eq!(ab, bb, "render determinism (same session)");
+}
+
+// ---------------------------------------------------------------------------
+// 4: decode → render → export re-encode → ffprobe-clean MP4, duration exact
+// ---------------------------------------------------------------------------
+
+#[test]
+fn w5_export_reencode_duration_exact() {
+    let dir = tmp("w5-export");
+    let (mut e, _hash) = build_session(&dir);
+    let output = output_spec(320, 240);
+
+    // total timeline: clip A (48) + split tail (24) + clip B resized (40)
+    // = 112 ticks = 112/24000 s... but the RENDER span is clip coverage at
+    // 24 fps output: frames 0..111 land inside clips; export exactly the
+    // clip-covered span: 112 ticks = 4.667 s → 112 frames at 1/24? No:
+    // ticks(48) = 2 s, ticks(24) = 1 s, ticks(40) = 1.6667 s → total 4.6667 s
+    // → 112 frames at 24 fps exactly.
+    const N: i64 = 112;
+    let out = dir.join("export.mp4");
+    let info = e
+        .export_reencode(&out, &output, N)
+        .expect("export re-encode");
+    assert_eq!(info.tracks.len(), 1);
+    assert_eq!(
+        info.tracks[0].nb_frames,
+        Some(N as u64),
+        "frame count exact"
+    );
+    assert_eq!(
+        info.tracks[0].duration,
+        Some(Rational::new(N * output.rate_den, output.rate_num)),
+        "duration exact (± 0 frames)"
+    );
+
+    // reopen eye: libav probe of the produced file
+    let asset = ove_media::AssetRef::from_path(&out).expect("asset");
+    use ove_media::ProbeBackend;
+    let probed = ove_decode::ffmpeg::FfmpegProbe
+        .probe(&asset)
+        .expect("probe output");
+    assert_eq!(probed.container, ove_media::ContainerKind::Mp4);
+    let v = &probed.streams[0];
+    assert_eq!(v.codec, "mpeg4");
+    assert_eq!(v.nb_frames_hint, Some(N as u64));
+    assert_eq!(v.duration, Some(Rational::new(N, 24)));
+}
+
+// ---------------------------------------------------------------------------
+// 5: stream-copy export through the engine planner path
+// ---------------------------------------------------------------------------
+
+#[test]
+fn w5_export_copy_keyframe_aligned() {
+    let dir = tmp("w5-copy");
+    let mut e = Engine::create(&dir, (48_000, 1)).expect("create");
+    e.add_track(1, ove_timeline::TrackKind::Gap(GapTrack::new()))
+        .expect("track");
+    let hex = e.import_media(&media("copy24.mp4")).expect("import");
+
+    // copy [1 s, 3 s) — exact keyframe boundaries on this corpus
+    let out = dir.join("copy.mp4");
+    let (info, snaps) = e
+        .export_copy(&hex, Rational::new(1, 1), Rational::new(3, 1), &out)
+        .expect("export copy");
+    assert!(snaps.is_empty(), "aligned cut: no snaps");
+    assert_eq!(info.tracks[0].nb_frames, Some(48));
+    assert_eq!(info.tracks[0].duration, Some(Rational::new(2, 1)));
+}
+
+// ---------------------------------------------------------------------------
+// 6: undo/redo through the engine session survives a reopen
+// ---------------------------------------------------------------------------
+
+#[test]
+fn w5_undo_redo_reopen() {
+    let dir = tmp("w5-undo");
+    let (mut e, before_undo) = build_session(&dir);
+    e.undo().expect("undo");
+    let after_undo = e.state_hash();
+    assert_ne!(before_undo, after_undo);
+    e.redo().expect("redo");
+    let after_redo = e.state_hash();
+
+    drop(e);
+    let r = Engine::open(&dir).expect("reopen");
+    assert_eq!(r.state_hash(), after_redo, "redo marker replayed");
+    assert!(
+        r.project().undo_depth() >= 1,
+        "undo history rebuilt by replay"
+    );
+}

@@ -61,6 +61,12 @@ pub enum TimelineError {
     },
     /// Split point must be strictly inside the clip: 0 < at < duration.
     InvalidSplitPoint,
+    /// Replay tried to move the allocation cursor backwards — a lost-alloc
+    /// divergence (the log entry stream is inconsistent with prior state).
+    AllocationRegression {
+        current: ClipId,
+        requested: ClipId,
+    },
     /// Durations must be > 0.
     InvalidDuration,
 }
@@ -324,6 +330,22 @@ impl Timeline {
     /// save/reload, so the project layer serializes them (ADR-016). Read-only.
     pub fn next_id_value(&self) -> ClipId {
         self.next_id
+    }
+
+    /// Restore the allocation cursor on replay (ADR-017: each log entry
+    /// carries the session's cursor after execution, so a replay — from
+    /// empty or from a snapshot — lands on the exact live cursor). The
+    /// cursor is monotonic in a healthy session; a smaller restore value
+    /// would mean a lost-alloc divergence and is rejected.
+    pub fn set_next_id(&mut self, next_id: ClipId) -> Result<(), TimelineError> {
+        if next_id < self.next_id {
+            return Err(TimelineError::AllocationRegression {
+                current: self.next_id,
+                requested: next_id,
+            });
+        }
+        self.next_id = next_id;
+        Ok(())
     }
 
     /// Every id ever inserted and not currently removed — plus removed ones

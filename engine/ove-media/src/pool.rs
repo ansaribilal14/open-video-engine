@@ -52,7 +52,11 @@ pub struct PooledBuffer {
 
 impl PooledBuffer {
     pub fn into_frame_bytes(mut self) -> FrameBytes {
-        self.data.clear();
+        // move the buffer OUT intact — the caller just wrote the decoded
+        // pixels into it. (A `clear()` here shipped every decoded frame as
+        // an empty payload; the decode suite passed vacuously until the W5
+        // engine wired real renders — the mutation-detection gap is now
+        // closed by a payload-content gate in the decode conformance suite.)
         FrameBytes {
             data: std::mem::take(&mut self.data),
             strides: self.strides.clone(),

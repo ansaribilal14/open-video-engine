@@ -315,6 +315,12 @@ impl Project {
         &self.timeline
     }
 
+    /// Mutable timeline access for the session layer (single writer): id
+    /// allocation before constructing Insert commands (E-012 discipline).
+    pub fn timeline_mut(&mut self) -> &mut Timeline {
+        &mut self.timeline
+    }
+
     pub fn undo_depth(&self) -> usize {
         self.undo_stack.len()
     }
@@ -334,6 +340,7 @@ impl Project {
             owner,
             payload: LogPayload::of_command(&cmd),
             undo: Some(LogPayload::of_command(&inverse)),
+            nid: self.timeline.next_id_value(),
         };
         let seq = self.writer.append(entry)?;
         self.undo_stack.push(UndoStep {
@@ -367,6 +374,7 @@ impl Project {
                 inverse: Box::new(LogPayload::of_command(&step.inverse)),
             },
             undo: None,
+            nid: self.timeline.next_id_value(),
         };
         self.writer.append(entry)?;
         self.touch_manifest()?;
@@ -397,6 +405,7 @@ impl Project {
                 cmd: Box::new(LogPayload::of_command(&original)),
             },
             undo: None,
+            nid: self.timeline.next_id_value(),
         };
         self.writer.append(entry)?;
         self.touch_manifest()?;
@@ -587,6 +596,11 @@ fn replay_entry(
     redo_stack: &mut Vec<Command>,
     entry: &LogEntry,
 ) -> Result<(), ProjectError> {
+    // cursor restore (E-012): the entry carries the session cursor AFTER
+    // execution; nid == 0 marks a legacy entry without cursor state.
+    if entry.nid > 0 {
+        tl.set_next_id(entry.nid).map_err(ProjectError::Timeline)?;
+    }
     match &entry.payload {
         LogPayload::Undo { target, inverse } => {
             let inv = inverse
