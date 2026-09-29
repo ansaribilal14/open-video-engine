@@ -399,7 +399,7 @@ pub fn handle_line(line: &str) -> Option<String> {
             }
         }
         "notifications/initialized" => Ok(Value::Null),
-        other if is_notification => Ok(Value::Null),
+        _ if is_notification => Ok(Value::Null),
         other => Err((-32601, format!("method not found: {other}"))),
     };
 
