@@ -75,6 +75,7 @@ fn seeded_timeline(kind: fn() -> TrackKind, seed: u64, n: usize) -> (Timeline, V
                 id,
                 duration: ticks(d),
                 source_in: ticks(0),
+                properties: Default::default(),
             },
         })
         .unwrap();
@@ -97,6 +98,7 @@ fn random_command(rng: &mut Rng, tl: &mut Timeline, track: u64) -> Option<Comman
                 id,
                 duration: ticks(481 + (rng.next() % 240_000) as i64),
                 source_in: ticks(0),
+                properties: Default::default(),
             },
         });
     }
@@ -146,6 +148,7 @@ fn random_command(rng: &mut Rng, tl: &mut Timeline, track: u64) -> Option<Comman
                     id,
                     duration: ticks(481 + (rng.next() % 240_000) as i64),
                     source_in: ticks(0),
+                    properties: Default::default(),
                 },
             })
         }
@@ -259,6 +262,7 @@ fn p2_oracle_equivalence() {
                     id,
                     duration: ticks(481 + (rng.next() % 240_000) as i64),
                     source_in: ticks(0),
+                    properties: Default::default(),
                 },
             })
             .unwrap();
@@ -290,6 +294,7 @@ fn p2_oracle_equivalence() {
                     id,
                     duration: ticks(481 + (rng2.next() % 240_000) as i64),
                     source_in: ticks(0),
+                    properties: Default::default(),
                 },
             })
             .unwrap();
@@ -464,6 +469,7 @@ fn p6_batch_atomicity() {
             id: 999_999,
             duration: ticks(1000),
             source_in: ticks(0),
+            properties: Default::default(),
         };
         let batch = Command::Batch {
             cmds: vec![
@@ -530,6 +536,7 @@ fn p7_cross_track_move() {
                     id,
                     duration: ticks(1000 + i as i64),
                     source_in: ticks(0),
+                    properties: Default::default(),
                 },
             })
             .unwrap();
@@ -543,6 +550,7 @@ fn p7_cross_track_move() {
                     id,
                     duration: ticks(2000 + i as i64),
                     source_in: ticks(0),
+                    properties: Default::default(),
                 },
             })
             .unwrap();
@@ -617,6 +625,7 @@ fn p8_threaded_disjoint_tracks() {
                         id: i as u64 + 1,
                         duration: ticks(d),
                         source_in: ticks(0),
+                        properties: Default::default(),
                     },
                 )
                 .unwrap();
@@ -689,7 +698,8 @@ fn p9_typed_errors_no_mutation() {
                 clip: Clip {
                     id: 888,
                     duration: ticks(1),
-                    source_in: ticks(0)
+                    source_in: ticks(0),
+                    properties: Default::default(),
                 }
             }),
             Err(TimelineError::TrackNotFound(9))

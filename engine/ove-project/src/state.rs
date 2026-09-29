@@ -13,7 +13,10 @@ use std::collections::BTreeMap;
 
 use ove_media::ContentHash;
 use ove_time::Rational;
-use ove_timeline::{Clip, ClipId, GapTrack, OracleTrack, Timeline, TrackId, TrackKind};
+use ove_timeline::{
+    Clip, ClipId, ClipProperties, GapTrack, Interpolation, Keyframe, OracleTrack, PropertyTrack,
+    Timeline, TrackId, TrackKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Exact rational in the on-disk canonical shape (floats are FORBIDDEN by
@@ -42,6 +45,94 @@ pub struct MirrorClip {
     pub id: ClipId,
     pub duration: NumPair,
     pub source_in: NumPair,
+    /// Per-clip keyframe animation (WAVE 8, ADR-019) — exact rationals,
+    /// validated on load (PropertyTrack::from_keys). Serde-defaulted so v0.1
+    /// / v1 snapshots (pre-animation) load unchanged.
+    #[serde(default)]
+    pub properties: MirrorProperties,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MirrorInterp {
+    Linear,
+    Hold,
+}
+
+impl MirrorInterp {
+    pub(crate) fn from_timeline(i: Interpolation) -> Self {
+        match i {
+            Interpolation::Linear => MirrorInterp::Linear,
+            Interpolation::Hold => MirrorInterp::Hold,
+        }
+    }
+    pub(crate) fn to_timeline(self) -> Interpolation {
+        match self {
+            MirrorInterp::Linear => Interpolation::Linear,
+            MirrorInterp::Hold => Interpolation::Hold,
+        }
+    }
+}
+
+/// One keyframe in the on-disk canonical shape (exact {num, den} pairs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MirrorKeyframe {
+    pub t: NumPair,
+    pub v: NumPair,
+    pub interp: MirrorInterp,
+}
+
+impl MirrorKeyframe {
+    pub(crate) fn from_timeline(k: &Keyframe) -> Self {
+        MirrorKeyframe {
+            t: NumPair::of(k.time),
+            v: NumPair::of(k.value),
+            interp: MirrorInterp::from_timeline(k.interp),
+        }
+    }
+    pub(crate) fn to_timeline(self) -> Result<Keyframe, String> {
+        Ok(Keyframe {
+            time: self.t.to_rational(),
+            value: self.v.to_rational(),
+            interp: self.interp.to_timeline(),
+        })
+    }
+}
+
+/// The three v1 animation tracks in declaration order (opacity, x, y).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MirrorProperties {
+    #[serde(default)]
+    pub opacity: Vec<MirrorKeyframe>,
+    #[serde(default)]
+    pub x: Vec<MirrorKeyframe>,
+    #[serde(default)]
+    pub y: Vec<MirrorKeyframe>,
+}
+
+impl MirrorProperties {
+    pub(crate) fn from_timeline(p: &ClipProperties) -> Self {
+        let conv = |t: &PropertyTrack| t.keys().iter().map(MirrorKeyframe::from_timeline).collect();
+        MirrorProperties {
+            opacity: conv(&p.opacity),
+            x: conv(&p.x),
+            y: conv(&p.y),
+        }
+    }
+    pub(crate) fn to_timeline(&self) -> Result<ClipProperties, String> {
+        let conv = |ks: &[MirrorKeyframe]| -> Result<PropertyTrack, String> {
+            let keys = ks
+                .iter()
+                .map(|k| k.to_timeline())
+                .collect::<Result<Vec<_>, _>>()?;
+            ove_timeline::PropertyTrack::from_keys(keys).map_err(|e| e.to_string())
+        };
+        Ok(ClipProperties {
+            opacity: conv(&self.opacity)?,
+            x: conv(&self.x)?,
+            y: conv(&self.y)?,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +188,7 @@ impl StateMirror {
                         id: c.id,
                         duration: NumPair::of(c.duration),
                         source_in: NumPair::of(c.source_in),
+                        properties: MirrorProperties::from_timeline(&c.properties),
                     });
                 });
             tracks.insert(
@@ -139,7 +231,8 @@ impl StateMirror {
                         id = mc.id
                     ));
                 }
-                let clip = Clip::new(mc.id, mc.duration.to_rational(), mc.source_in.to_rational());
+                let clip = Clip::new(mc.id, mc.duration.to_rational(), mc.source_in.to_rational())
+                    .with_properties(mc.properties.to_timeline()?);
                 ove_timeline::TrackOps::insert_at(
                     tracks.get_mut(tid).expect("just inserted"),
                     pos,

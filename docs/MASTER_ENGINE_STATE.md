@@ -4,9 +4,58 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 7 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio — all landed)
+WAVE: 8 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = audio leg (this wave's merge)
+COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = PR #9 (b5f322f); W8 = keyframes leg (this wave's merge)
+
+## Session verification record (2026-09-29, fresh continuation #4)
+
+All W0–W7 claims re-verified from scratch before Wave 8 work:
+
+- HEAD `b5f322f` on main; takeover baseline `33fde9d` IS an ancestor
+  (35 commits since); tree clean; wave-7-audio fully merged (zero
+  unmerged commits).
+- GitHub Actions run 36496623143 on exact HEAD `b5f322f`: SUCCESS — W7
+  post-merge main GREEN.
+- Local (system FFmpeg 7.1.5 path, unprivileged recipe per DEV_ENV.md,
+  rustc 1.98.1): 141/141 tests GREEN · fmt GREEN · clippy (workspace,
+  all targets) GREEN · libav-confinement check PASS.
+
+## WAVE 8 deltas (2026-09-29, ADR-019)
+
+1. **Keyframes live on the Clip** (ove-timeline::property): ClipProperties
+   {opacity, x, y} with LOCAL clip times, strictly-increasing keys,
+   loud validation (typed PropertyError, never silently sorted). Move
+   carries animation untouched; Resize strands keys inert (evaluation
+   domain [0, dur) — growing back re-activates; duration-only inverse
+   stays exact); **Split slices with the computed boundary value
+   inserted on BOTH halves** — the split-preserve rule (S8, 300 seeded
+   cases, exact evaluation continuity across the seam, Hold/Linear
+   semantics survive the cut).
+2. **Command::SetKeyframes** — wholesale replace of one property's keys;
+   the exact inverse is the previous key list under the same command
+   shape; undo/redo/replay need zero new machinery. Opacity values
+   validated ∈ [0,1] at command time. Split's inverse batch embeds
+   SetKeyframes restores (S9: hash-exact undo roundtrip).
+3. **Exact evaluation**: per-key out-interp Linear (exact rational lerp,
+   i128-checked) | Hold; boundary rules exact (on-key identity,
+   hold-before/after). S7 pins evaluation against a naive oracle.
+4. **Engine evaluation into the render path**: build_render_input(out, t)
+   evaluates per frame; geometry via Rational::round_half_up (ove-time
+   P13 — which PROVES the conversion is total over representable
+   rationals); i32 overflow is a typed KeyframeValueOutOfRange, never
+   saturation. W8 integration test: plan carries evaluated alpha/dx
+   verbatim, undo/redo hash-exact, animated state survives reopen,
+   renders byte-identical.
+5. **Persistence**: StateMirror.properties (serde-default — old
+   snapshots load unchanged, keys as exact pairs); log grammar +1
+   payload (set_keyframes), embedded inverse needs no extra grammar.
+   P-9: save/reopen hash equality through SetKeyframes AND a split
+   inverse batch.
+6. Test IDs: ove-time P13 (round_half_up exactness + totality proof);
+   ove-timeline keyframes.rs (unit + S7 + S8 + S9, 11 tests);
+   ove-project P-9; ove-engine w8_keyframes_exact_eval_and_stability.
+   Workspace **157/157** (was 141).
 
 ## Session verification record (2026-09-28, independent takeover continuation)
 
@@ -298,21 +347,21 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 | Crate | State | Evidence |
 |---|---|---|
-| ove-time | TESTED — 9 unit + 18 property (P1–P12 + recip/ceil) | 141/141 workspace local (2026-09-29, W7) + CI |
-| ove-timeline | TESTED — 10 properties (AVL primary, ADR-011) + 7 seam properties (S0–S6, ADR-013) | CI + local; bench in ADR-011 |
+| ove-time | TESTED — 9 unit + 21 property (P1–P13 incl. round_half_up totality) | 157/157 workspace local (2026-09-29, W8) + CI |
+| ove-timeline | TESTED — 10 properties (AVL primary, ADR-011) + 7 seam properties (S0–S6, ADR-013) + 11 keyframe suites (unit + S7/S8/S9, ADR-019) | CI + local; bench in ADR-011 |
 | ove-media | TESTED — 13 unit (asset hash, FrameEnvelope, pool, probe types) | CI + local |
 | ove-decode | TESTED — 14 conformance (D-1..D-12) + 6 probe + 4 audio (A-1..A-4); libav confined | CI + local, both system and bundled libav |
 | ove-render | TESTED — RG-1..RG-7 (purity, goldens, layer order, retime, split continuity, optimizer safety, color) | CI + local; ADR-014 |
-| ove-encode | TESTED — P01–P10 planner + E-1..E-5/E-7/H1–H5 video + E-8..E-10 audio (ffprobe/libav/pixel-verified, goldens committed) | 141/141 workspace local (2026-09-29); ADR-015/ADR-018 |
-| ove-project | TESTED — P-1..P-8 acceptance (11 tests incl. subprocess kill-9, compaction equivalence, corruption drill) | 141/141 workspace local (2026-09-29); ADR-016 |
-| ove-engine | TESTED — integration suite 6 + W7 audio vertical (assembly, A/V export, WAV, hash stability) | 141/141 workspace local (2026-09-29); ADR-017/ADR-018 |
-| ove-cli | TESTED — binary smoke (full flow via CARGO_BIN_EXE) | 141/141 workspace local (2026-09-29) |
+| ove-encode | TESTED — P01–P10 planner + E-1..E-5/E-7/H1–H5 video + E-8..E-10 audio (ffprobe/libav/pixel-verified, goldens committed) | 157/157 workspace local (2026-09-29); ADR-015/ADR-018 |
+| ove-project | TESTED — P-1..P-9 acceptance (12 tests incl. subprocess kill-9, compaction equivalence, corruption drill, keyframe persistence) | 157/157 workspace local (2026-09-29); ADR-016/ADR-019 |
+| ove-engine | TESTED — integration suite 7 + W7 audio vertical + W8 keyframe vertical (exact plan eval, hash/reopen stability) | 157/157 workspace local (2026-09-29); ADR-017/ADR-018/ADR-019 |
+| ove-cli | TESTED — binary smoke (full flow via CARGO_BIN_EXE) | 157/157 workspace local (2026-09-29) |
 
 ## Current research / architecture status
 
-- ADR-001/002/005/007/008/009/010/011/012/013/014/015/016/017/018 ACCEPTED
-  (005 promoted 2026-09-29, v1 surface landed; 018 audio leg v1);
-  ADR-003/004/006
+- ADR-001/002/005/007/008/009/010/011/012/013/014/015/016/017/018/019 ACCEPTED
+  (005 promoted 2026-09-29, v1 surface landed; 018 audio leg v1; 019 keyframes
+  v1); ADR-003/004/006
   PROPOSED with named evidence legs. ADR-007: overflow policy; ADR-013: seam
   + dead-leg removal; ADR-014: software renderer v1.
 - 45 research docs + 137-source ledger + gates (13 UNDERSTOOD / 1 PARTIAL env-bound).
@@ -321,22 +370,22 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Current validation status
 
-- 141/141 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
-  1.98.1), fmt GREEN, clippy GREEN (workspace, all targets), after W7
-  audio (2026-09-29). libav-confinement check PASS.
+- 157/157 workspace tests GREEN locally (system FFmpeg 7.1.5 path, rustc
+  1.98.1), fmt GREEN, clippy GREEN (workspace, all targets), after W8
+  keyframes (2026-09-29). libav-confinement check PASS.
 - Bundled path: exercised by CI on this wave's PR (bundled libav now also
   links swscale + swresample via the union feature set; portability guard
   scans the same object tree; E-5 byte gate self-skips with an explicit
   report on a different libav identity, structure gates always run).
-- CI: ALL GREEN through W6 merge + HEAD run 36472738518 on `451e67e`.
+- CI: ALL GREEN through W7 merge (run 36496623143 on `b5f322f`).
 
 ## Current CI state
 
 - Workflow: fmt + clippy + tests (bundled) + portability guard + cargo-audit
   + libav-confinement. Cache prefix `v2-portable-ffmpeg` (poisoned caches
   unreachable).
-- Latest pre-W7 confirmation: run 36472738518 on HEAD `451e67e` SUCCESS
-  (2026-09-28T19:30Z). All of runs 24–31 SUCCESS.
+- Latest pre-W8 confirmation: run 36496623143 on HEAD `b5f322f` SUCCESS
+  (2026-09-28T23:11Z). All recent runs SUCCESS.
 
 ## Current blockers
 
@@ -344,12 +393,13 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Current open gaps (top)
 
-1. WAVE 8 keyframes: property→keyframes→interpolation (linear/hold) →
-   evaluation over exact time; property tests (monotonic keys, boundary
-   exactness, split-preserve).
-2. Audio named gaps (ADR-018): multi-track mixing/overlaps, audio
+1. Audio named gaps (ADR-018): multi-track mixing/overlaps, audio
    retiming, multi-lane assembly, AAC byte goldens (E-5 keying), E-6
    audio checkpoint execution.
+2. Keyframe named gaps (ADR-019): curves beyond Linear/Hold (bezier/ease),
+   audio keyframing (volume automation) not wired into the assembly,
+   animatable properties beyond the renderer's placement inputs, key-
+   data duplication at every cut inside an animation (accepted v1 cost).
 3. OpenH264/SVT-AV1 encoder legs; E-6 kill-resume execution at segment
    granularity (checkpoint fields exist).
 4. Mutation-style "test the tests" not yet systematic.
@@ -361,7 +411,7 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
 3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
-7 audio ✓ → 8 keyframes → 9 GPU → 10–12 platforms → 13 conformance →
+7 audio ✓ → 8 keyframes ✓ → 9 GPU → 10–12 platforms → 13 conformance →
 14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
 19 perf → 20 docs/release → 21 production audit.
 
@@ -412,6 +462,17 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
   document state (E-012). Confidence 0.9. Reopen: a second schema version
   (migration serializers + fixtures); a requirement for fsync-grade
   durability claims; track-structure commands at the W8 era.
+- ADR-019 (2026-09-29): keyframe animation v1 — keys on the clip (local
+  times; Move carries, Resize strands inert, Split slices with computed
+  boundary keys both sides = exact split-preserve), per-key out-interp
+  Linear/Hold with exact rational evaluation and loud validation,
+  SetKeyframes wholesale-replace command whose inverse is the previous
+  key list, animation as document state (hash + mirror + log grammar),
+  engine-side evaluation with P13 round-half-up i32 conversion
+  (proven total over representable rationals). Confidence 0.9. Reopen:
+  curve families beyond Linear/Hold; animatable properties outside the
+  placement inputs; audio keyframing; speed≠1 keyframe time mapping
+  (rides the retime verb, ADR-013).
 
 ## Unresolved decisions (registry)
 
@@ -421,7 +482,9 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 8 — keyframes (BUILD_PLAN wave 7b): property→keyframes→interpolation
-(linear/hold first) → evaluation over exact time; property tests (monotonic
-keys, boundary exactness, split-preserve). Land via PR with
-fmt/clippy/tests green and this file updated, then WAVE 9 (GPU).
+WAVE 9 — GPU upgrade (BUILD_PLAN wave 6): wgpu compositor consuming the
+same FrameEnvelope; WGSL passes mirroring the software path; correctness
+suite = the same golden frames (software stays the correctness
+reference); separate perf bench with committed baselines; feature-detect
++ fallback. Land via PR with fmt/clippy/tests green and this file
+updated, then WAVE 10–12 (platform legs).

@@ -18,6 +18,7 @@ pub mod avl;
 pub mod gap;
 pub mod mapping;
 pub mod oracle;
+pub mod property;
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -26,18 +27,24 @@ use ove_time::Rational;
 pub use avl::AvlTrack;
 pub use gap::GapTrack;
 pub use oracle::OracleTrack;
+pub use property::{
+    ClipProperties, Interpolation, Keyframe, PropertyError, PropertyName, PropertyTrack,
+};
 
 pub type ClipId = u64;
 pub type TrackId = u64;
 
 /// A clip as the timeline sees it. `duration` is the timeline-duration
 /// (exact); `source_in` is the offset into the source media (exact). No
-/// floats, ever (E-003).
+/// floats, ever (E-003). `properties` carries the clip's keyframe animation
+/// (ADR-019) — LOCAL clip times, sliced by Split, carried untouched by
+/// Move/Resize/Remove.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Clip {
     pub id: ClipId,
     pub duration: Rational,
     pub source_in: Rational,
+    pub properties: ClipProperties,
 }
 
 impl Clip {
@@ -46,7 +53,15 @@ impl Clip {
             id,
             duration,
             source_in,
+            properties: ClipProperties::default(),
         }
+    }
+
+    /// Same clip with explicit animation data (tests + the project layer's
+    /// snapshot loader).
+    pub fn with_properties(mut self, properties: ClipProperties) -> Self {
+        self.properties = properties;
+        self
     }
 }
 
@@ -69,6 +84,21 @@ pub enum TimelineError {
     },
     /// Durations must be > 0.
     InvalidDuration,
+    /// Keyframe data failed validation (negative time / not strictly
+    /// increasing) — the typed PropertyError from ove-timeline::property.
+    InvalidKeyframes(PropertyError),
+    /// Opacity keyframe values must stay in [0, 1] (the renderer's blend
+    /// domain); anything else is rejected at command time, not at render.
+    OpacityValueOutOfRange {
+        clip: ClipId,
+        value: Rational,
+    },
+}
+
+impl From<PropertyError> for TimelineError {
+    fn from(e: PropertyError) -> Self {
+        TimelineError::InvalidKeyframes(e)
+    }
 }
 
 /// The per-track container contract. Implementations must preserve exact
@@ -109,6 +139,15 @@ pub trait TrackOps {
     fn remove_at(&mut self, pos: usize) -> Result<Clip, TimelineError>;
     /// Set duration; returns the previous duration (for exact inverses).
     fn set_duration_at(&mut self, pos: usize, d: Rational) -> Result<Rational, TimelineError>;
+    /// Replace the clip at `pos` wholesale (properties included); returns
+    /// the previous clip. Default: remove + re-insert at the same position
+    /// (positionally exact for every implementation — the container is a
+    /// pure sequence; no id bookkeeping lives below the Timeline).
+    fn replace_at(&mut self, pos: usize, clip: Clip) -> Result<Clip, TimelineError> {
+        let old = self.remove_at(pos)?;
+        self.insert_at(pos, clip)?;
+        Ok(old)
+    }
     /// In-order walk with derived absolute starts (the render-walk path).
     fn walk(&self, f: &mut dyn FnMut(usize, Rational, &Clip));
     /// Deterministic FNV-1a over (positions, ids, durations, source offsets).
@@ -129,6 +168,10 @@ pub trait TrackOps {
             mix(&c.source_in.den().to_le_bytes());
             mix(&start.num().to_le_bytes());
             mix(&start.den().to_le_bytes());
+            // keyframe animation is document state (ADR-019): hashed in
+            // declaration order, tagged per property, empty tracks mix a
+            // zero count so absent vs present stays distinguishable
+            c.properties.mix_into_hash(&mut mix);
         });
         h
     }
@@ -218,7 +261,10 @@ pub enum Command {
     Remove { track: TrackId, id: ClipId },
     /// Split clip `id` at offset `at` into its own duration
     /// (0 < at < duration). Left half keeps the id and source_in; the right
-    /// half gets `new_id` and source_in + at. ALLOCATION DISCIPLINE (E-012
+    /// half gets `new_id` and source_in + at. Keyframe animation is sliced
+    /// with the computed boundary value inserted on BOTH halves so the
+    /// evaluation is exactly preserved across the seam (ADR-019, S8).
+    /// ALLOCATION DISCIPLINE (E-012
     /// finding, extends E-003): `new_id` is allocated by the CALLER via
     /// `Timeline::alloc_id()` at command-construction time and rides the log
     /// explicitly — the engine never allocates during apply. A log with
@@ -247,6 +293,18 @@ pub enum Command {
     /// Atomic batch: all-or-nothing; inverse = reversed sub-inverses
     /// (E-009 batch atomicity).
     Batch { cmds: Vec<Command> },
+    /// Replace the keyframe animation of ONE property on a clip (WAVE 8,
+    /// ADR-019). Keys are validated loudly (strictly increasing, ≥ 0;
+    /// opacity values ∈ [0,1]); the exact inverse is the PREVIOUS key list
+    /// under the same command shape — set-overwrites are their own
+    /// structural family, so undo/replay need no new machinery. An empty
+    /// `keys` list clears the animation (the static value takes over).
+    SetKeyframes {
+        track: TrackId,
+        id: ClipId,
+        property: PropertyName,
+        keys: Vec<Keyframe>,
+    },
 }
 
 /// The timeline: ordered tracks, id allocation, command application with
@@ -428,28 +486,56 @@ impl Timeline {
                 if *at >= c.duration {
                     return Err(TimelineError::InvalidSplitPoint);
                 }
+                // Animation slicing (ADR-019): both halves get the computed
+                // boundary value so the animation is exact across the seam.
+                let (left_props, right_props) = c.properties.slice_split(*at);
                 let right = Clip {
                     id: *new_id,
                     duration: c.duration.sub(*at),
                     source_in: c.source_in.add(*at),
+                    properties: right_props,
+                };
+                let left = Clip {
+                    id: c.id,
+                    duration: *at,
+                    source_in: c.source_in,
+                    properties: left_props,
                 };
                 let t = self.track_mut(*track)?;
-                t.set_duration_at(pos, *at)?;
+                t.replace_at(pos, left)?;
                 t.insert_at(pos + 1, right)?;
                 self.used_ids.insert(*new_id);
-                Ok(Command::Batch {
-                    cmds: vec![
-                        Command::Remove {
-                            track: *track,
-                            id: *new_id,
-                        },
-                        Command::Resize {
+                // Inverse: remove the right half, restore the left's ORIGINAL
+                // animation per property (only where animation existed — the
+                // sliced halves are non-empty exactly then), restore the
+                // original duration. Each sub-inverse is exact; the batch
+                // reproduces the pre-split clip byte-exactly.
+                let mut inv_cmds = vec![
+                    Command::Remove {
+                        track: *track,
+                        id: *new_id,
+                    },
+                    Command::Resize {
+                        track: *track,
+                        id: *id,
+                        duration: c.duration,
+                    },
+                ];
+                for (prop, orig) in [
+                    (PropertyName::Opacity, &c.properties.opacity),
+                    (PropertyName::X, &c.properties.x),
+                    (PropertyName::Y, &c.properties.y),
+                ] {
+                    if !orig.is_empty() {
+                        inv_cmds.push(Command::SetKeyframes {
                             track: *track,
                             id: *id,
-                            duration: c.duration,
-                        },
-                    ],
-                })
+                            property: prop,
+                            keys: orig.keys().to_vec(),
+                        });
+                    }
+                }
+                Ok(Command::Batch { cmds: inv_cmds })
             }
             Command::Resize {
                 track,
@@ -502,6 +588,41 @@ impl Timeline {
                     from_track: *to_track,
                     to_track: *from_track,
                     to_index: src_pos,
+                })
+            }
+            Command::SetKeyframes {
+                track,
+                id,
+                property,
+                keys,
+            } => {
+                // Loud validation at the boundary: order/monotonicity/negative
+                // times (PropertyTrack::from_keys) + the renderer's blend
+                // domain for opacity. Never repaired, never silently sorted.
+                let new_track = PropertyTrack::from_keys(keys.clone())?;
+                if *property == PropertyName::Opacity {
+                    for k in new_track.keys() {
+                        if k.value < Rational::zero(1) || k.value > Rational::new(1, 1) {
+                            return Err(TimelineError::OpacityValueOutOfRange {
+                                clip: *id,
+                                value: k.value,
+                            });
+                        }
+                    }
+                }
+                let t = self.track_mut(*track)?;
+                let pos = t.index_of(*id).ok_or(TimelineError::ClipNotFound(*id))?;
+                let mut c = t.clip_at(pos).unwrap().clone();
+                // wholesale replacement: the new track is already validated
+                let old = std::mem::replace(c.properties.track_mut(*property), new_track);
+                t.replace_at(pos, c)?;
+                // The exact inverse is the previous key list under the same
+                // command shape (set is its own inverse family).
+                Ok(Command::SetKeyframes {
+                    track: *track,
+                    id: *id,
+                    property: *property,
+                    keys: old.keys().to_vec(),
                 })
             }
             Command::Batch { cmds } => {

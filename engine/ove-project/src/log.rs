@@ -21,11 +21,38 @@
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 
-use ove_timeline::Command;
+use ove_timeline::{Command, PropertyName};
 use serde::{Deserialize, Serialize};
 
-use crate::state::NumPair;
+use crate::state::{MirrorKeyframe, MirrorProperties, NumPair};
 use crate::{Owner, ProjectError};
+
+/// The v1 animatable property set on the wire (ADR-019) — the mirror of
+/// `ove_timeline::PropertyName` (the timeline crate stays serde-free).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MirrorProperty {
+    Opacity,
+    X,
+    Y,
+}
+
+impl MirrorProperty {
+    fn from_timeline(p: PropertyName) -> Self {
+        match p {
+            PropertyName::Opacity => MirrorProperty::Opacity,
+            PropertyName::X => MirrorProperty::X,
+            PropertyName::Y => MirrorProperty::Y,
+        }
+    }
+    fn to_timeline(self) -> PropertyName {
+        match self {
+            MirrorProperty::Opacity => PropertyName::Opacity,
+            MirrorProperty::X => PropertyName::X,
+            MirrorProperty::Y => PropertyName::Y,
+        }
+    }
+}
 
 /// Exact mirror of `ove_timeline::Command` with schema-forced exactness:
 /// times are {num, den} pairs — floats are REJECTED at load (serde type
@@ -65,6 +92,15 @@ pub enum LogPayload {
         to_track: u64,
         to_index: usize,
     },
+    /// WAVE 8 (ADR-019): replace one property's keyframe animation. Keys
+    /// are exact pairs; the embedded inverse (the previous key list) rides
+    /// the entry via the standard `undo` field — no extra grammar.
+    SetKeyframes {
+        track: u64,
+        id: u64,
+        property: MirrorProperty,
+        keys: Vec<MirrorKeyframe>,
+    },
     Batch {
         cmds: Vec<LogPayload>,
     },
@@ -91,6 +127,7 @@ impl LogPayload {
                     id: clip.id,
                     duration: NumPair::of(clip.duration),
                     source_in: NumPair::of(clip.source_in),
+                    properties: MirrorProperties::from_timeline(&clip.properties),
                 },
                 asset: None,
             },
@@ -129,6 +166,17 @@ impl LogPayload {
                 to_track: *to_track,
                 to_index: *to_index,
             },
+            Command::SetKeyframes {
+                track,
+                id,
+                property,
+                keys,
+            } => LogPayload::SetKeyframes {
+                track: *track,
+                id: *id,
+                property: MirrorProperty::from_timeline(*property),
+                keys: keys.iter().map(MirrorKeyframe::from_timeline).collect(),
+            },
             Command::Batch { cmds } => LogPayload::Batch {
                 cmds: cmds.iter().map(LogPayload::of_command).collect(),
             },
@@ -146,7 +194,8 @@ impl LogPayload {
                     clip.id,
                     clip.duration.to_rational(),
                     clip.source_in.to_rational(),
-                ),
+                )
+                .with_properties(clip.properties.to_timeline()?),
             },
             LogPayload::Remove { track, id } => Command::Remove {
                 track: *track,
@@ -182,6 +231,20 @@ impl LogPayload {
                 from_track: *from_track,
                 to_track: *to_track,
                 to_index: *to_index,
+            },
+            LogPayload::SetKeyframes {
+                track,
+                id,
+                property,
+                keys,
+            } => Command::SetKeyframes {
+                track: *track,
+                id: *id,
+                property: property.to_timeline(),
+                keys: keys
+                    .iter()
+                    .map(|k| k.to_timeline())
+                    .collect::<Result<Vec<_>, String>>()?,
             },
             LogPayload::Batch { cmds } => Command::Batch {
                 cmds: cmds

@@ -27,10 +27,14 @@ pub struct Placement {
     pub window: ClipWindow,
     /// Which source (asset+stream) this placement reads.
     pub source: SourceId,
-    /// Constant opacity for v1 (keyframes land in wave 8 — same compile rule:
-    /// any time-dependent value becomes exact-rational-at-frame-pts).
+    /// Opacity for THIS frame — the engine resolves keyframe animation
+    /// (ADR-019) at the frame's timeline pts before building the input;
+    /// an unanimated clip arrives at its static value. Exact rational ∈
+    /// [0, 1] (validated below).
     pub alpha: Rational,
-    /// Integer pixel offset of the source frame's top-left in the output.
+    /// Integer pixel offset of the source frame's top-left in the output
+    /// for THIS frame (keyframed geometry resolved by the engine, ADR-019,
+    /// deterministic round-half-up conversion; P13).
     pub offset: (i32, i32),
     /// The source stream's declared color tags (from probe — known at ingest,
     /// NOT per-frame data). Drives the RG-7 single-conversion decision.

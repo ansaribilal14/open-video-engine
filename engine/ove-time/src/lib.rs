@@ -220,6 +220,22 @@ impl Rational {
         let neg_floor = self.neg().floor_div_rate(rate_num, rate_den);
         neg_floor.checked_neg().expect("frame index exceeds i64")
     }
+
+    /// Exact round-half-up to i64 — halves round toward +∞, i.e.
+    /// `floor(x + 1/2)` in exact arithmetic. This is THE deterministic
+    /// exact→integer conversion for keyframed geometry (ADR-019), matching
+    /// the u16 round-half-up blending convention of the software renderer
+    /// (RENDER_GRAPH_SPEC v1): same input, same integer, every platform.
+    /// Panics (fail-fast, ADR-007) if the result exceeds i64 — never wraps,
+    /// never saturates.
+    pub fn round_half_up(self) -> i64 {
+        let n = self.num as i128;
+        let d = self.den as i128; // den > 0 by the Rational invariant
+        let q = n.div_euclid(d); // true floor for d > 0
+        let r = n.rem_euclid(d); // fractional part in [0, d)
+        let q = if r * 2 >= d { q + 1 } else { q };
+        i64::try_from(q).expect("round_half_up result exceeds i64")
+    }
 }
 
 impl PartialOrd for Rational {
