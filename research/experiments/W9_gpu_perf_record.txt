@@ -1,0 +1,12 @@
+# W9 GPU perf probe — committed record (2026-09-29, this container, 2 vCPU / 3.9 GB RAM)
+# Command: cargo run -p ove-render --features gpu --release --example gpu_perf_probe
+# Plan: 640x360, 3 layers (fetch+transform+blend x3), 60 frames.
+# HONESTY (E-005 rule): llvmpipe is a SOFTWARE rasterizer — the gpu timings
+# below are INVALID for any performance claim. Real-hardware ratio gates
+# (doc 45 T-7) remain a hardware-bound residual until a real-GPU run replaces this record.
+
+adapter: llvmpipe (LLVM 19.1.7, 256 bits) / llvmpipe / Cpu
+adapter_class: SOFTWARE — GPU timings INVALID for any perf claim (E-005 rule)
+software frame: 3.050 ms
+gpu frame:      6.433 ms
+ratio gpu/software: 0.47x (INVALID — software adapter)

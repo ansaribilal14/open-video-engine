@@ -88,6 +88,37 @@ jobs:
         working-directory: engine
         run: cargo audit
 
+  gpu-conformance:
+    name: GPU parity vs software (lavapipe, wave 9 / ADR-020)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Wave 9 correctness leg: a Vulkan loader + Mesa lavapipe ICD is enough
+      # (E-005 rule) — no GPU, no display. Runners have passwordless sudo.
+      - name: Install lavapipe (software Vulkan ICD) + libclang
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libclang-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo (prefix aligned with rust job, ADR-012)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+          prefix-key: v2-portable-ffmpeg
+
+      - name: Clippy (gpu feature, all targets, deny warnings)
+        working-directory: engine
+        run: cargo clippy -p ove-render --all-targets --features gpu -- -D warnings
+
+      # Byte parity G-1..G-8 — tolerance 0 vs the software executor.
+      # If this ever goes red on a runner, that adapter's arithmetic diverges
+      # from the reference: ADR-020 reopen condition, NOT a test to weaken.
+      - name: GPU parity suite (tolerance 0 vs software reference)
+        working-directory: engine
+        run: cargo test -p ove-render --release --features gpu --test gpu_conformance
+
   libav-confinement:
     name: libav* confined to ove-decode (DECODER_SPEC §5)
     runs-on: ubuntu-latest
