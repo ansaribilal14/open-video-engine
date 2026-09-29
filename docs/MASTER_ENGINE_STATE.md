@@ -6,7 +6,7 @@
 
 WAVE: 8 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = PR #9 (b5f322f); W8 = keyframes leg (this wave's merge)
+COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = PR #9 (b5f322f); W8 = PR #10 (00a46b9)
 
 ## Session verification record (2026-09-29, fresh continuation #4)
 
@@ -377,15 +377,17 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
   links swscale + swresample via the union feature set; portability guard
   scans the same object tree; E-5 byte gate self-skips with an explicit
   report on a different libav identity, structure gates always run).
-- CI: ALL GREEN through W7 merge (run 36496623143 on `b5f322f`).
+- CI: PR run 36501739232 on `a42a975` SUCCESS (all 3 jobs, bundled path
+  included); post-merge main run 36502138331 on `00a46b9` SUCCESS —
+  WAVE 8 landed.
 
 ## Current CI state
 
 - Workflow: fmt + clippy + tests (bundled) + portability guard + cargo-audit
   + libav-confinement. Cache prefix `v2-portable-ffmpeg` (poisoned caches
   unreachable).
-- Latest pre-W8 confirmation: run 36496623143 on HEAD `b5f322f` SUCCESS
-  (2026-09-28T23:11Z). All recent runs SUCCESS.
+- Latest confirmation: post-merge run 36502138331 on HEAD `00a46b9`
+  SUCCESS (2026-09-29). All recent runs SUCCESS.
 
 ## Current blockers
 
