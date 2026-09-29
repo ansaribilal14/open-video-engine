@@ -290,12 +290,26 @@ impl LogWriter {
     /// Open (or create) the log for appending. NEVER truncates: the log is
     /// the record — truncation is a compaction-only operation and goes
     /// through the atomic temp+rename path, never through this handle.
+    ///
+    /// POSITION POLICY (waves 10–12 conformance finding): the handle uses
+    /// create+write with an EXPLICIT seek-to-end instead of the O_APPEND
+    /// flag. Native POSIX semantics are byte-identical for the single
+    /// writer (each write continues at the end reached by the previous
+    /// one), but WASI runtimes (wasmtime, verified 2026-09-29) do not
+    /// honor O_APPEND on persistent handles — every write landed at
+    /// offset 0, silently destroying the log. Explicit placement is
+    /// correct on BOTH platforms and keeps the flush-per-entry kill-9
+    /// model unchanged (the P-2 acceptance invariant).
     pub fn open(path: &Path, next_seq: u64) -> Result<Self, ProjectError> {
-        let file = std::fs::OpenOptions::new()
+        let mut file = std::fs::OpenOptions::new()
             .create(true)
-            .append(true)
+            .write(true)
+            .truncate(false)
             .open(path)
             .map_err(|e| ProjectError::Io(format!("open log: {e}")))?;
+        use std::io::Seek;
+        file.seek(std::io::SeekFrom::End(0))
+            .map_err(|e| ProjectError::Io(format!("seek log end: {e}")))?;
         Ok(LogWriter { file, next_seq })
     }
 

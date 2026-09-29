@@ -16,3 +16,9 @@ ove-media = { path = "../ove-media" }
 blake3 = "1.8"
 wgpu = { version = "25.0", optional = true }
 pollster = { version = "0.4", optional = true }
+
+# Android leg (waves 10–12): the C blake3 build needs the NDK clang; the
+# `pure` implementation is the same algorithm (identical digests, tested
+# upstream) and needs no C toolchain — scoped to Android targets only.
+[target.'cfg(target_os = "android")'.dependencies]
+blake3 = { version = "1.8", features = ["pure"] }
