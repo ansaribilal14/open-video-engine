@@ -19,6 +19,8 @@ All W0–W8 claims re-verified from scratch before Wave 9 work:
 - Local (rebuilt container: rustup 1.98.1, system FFmpeg 7.1.5 dev libs via
   DEV_ENV.md unprivileged recipe): 157/157 tests GREEN · fmt GREEN · clippy
   (workspace, all targets) GREEN. W8 claim confirmed exactly.
+- Post-merge main (3be1a6c, PR #11): all 4 CI jobs SUCCESS — the new
+  gpu-conformance job ran the parity suite for real on a runner (lavapipe).
 
 ## WAVE 9 deltas (2026-09-29, ADR-020)
 
