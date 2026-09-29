@@ -4,9 +4,9 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 12 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes / 9 GPU / 10–12 platform-leg evidence — all landed)
+WAVE: 14 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes / 9 GPU / 10–12 platform-leg evidence / 13 conformance consolidation / 14 headless batch — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = PR #9 (b5f322f); W8 = PR #10 (00a46b9); W9 = PR #11 (3be1a6c); W10–12 = PR #12
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11 (3be1a6c); W10–12 = PR #12 (2c228fa); W13–14 = PR #13
 
 ## WAVE 10–12 deltas (2026-09-29, platform-leg evidence)
 
@@ -36,6 +36,24 @@ COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = 
 5. **NOT claimed**: CROSS_PLATFORM top-level status; L-1 REAL_GPU/transport;
    browser shells. Full honest status table:
    research/audit/W10-12_PLATFORM_LEGS_REPORT.md.
+
+## WAVE 13–14 deltas (2026-09-29)
+
+1. **W13 — conformance consolidation**: docs/CONFORMANCE_REPORT.md — the
+   aggregated per-suite/per-leg status (L-0 reference suites, L-1 GPU
+   parity, L-2 compile evidence, L-3 WASM core), declared divergences
+   (plan §4: den bound, WASI log position, android blake3 backend), and
+   the falsification clause (suites are the authority, not the report).
+2. **W14 — headless batch mode** (ove-cli `batch <dir> <script>`): ONE
+   engine session, MANY verbs (new/add-track/import/add-clip/split/
+   resize/move/remove/undo/redo/status/export-copy/export-wav);
+   `num/den` rationals only (floats rejected at the shell, ME-7 at the
+   boundary); relative paths root at the PROJECT dir; fail-fast with a
+   typed `ERR <lineno> <verb>` line; deterministic output contract —
+   same script + same inputs → byte-identical stdout (state hashes
+   included; the random-by-design project uuid excluded from batch
+   status by a documented decision). Tests: ove-cli/tests/batch.rs
+   (flow, byte-identical double-run, fail-fast abort). Workspace 158/158.
 
 ## Session verification record (2026-09-29, fresh continuation #5)
 
@@ -505,7 +523,7 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
 3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
 7 audio ✓ → 8 keyframes ✓ → 9 GPU ✓ → 10–12 platform-leg evidence ✓ →
-13 conformance → 14 headless → 15 AI/MCP → 16 scripting → 17 plugins →
+13 conformance ✓ → 14 headless ✓ → 15 AI/MCP → 16 scripting → 17 plugins →
 18 security → 19 perf → 20 docs/release → 21 production audit.
 
 ## Resolved decisions (registry)
@@ -595,8 +613,10 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 13 — cross-platform conformance consolidation: the §3 invariant table
-now RUNS in CI for native+WASI; extend the corpus subset records per leg,
-then WAVE 14 headless/batch, 15 AI/MCP, 16 scripting, 17 plugins,
-18 security, 19 perf, 20 docs/release, 21 production audit. Land via PR
-with fmt/clippy/tests green and this file updated.
+WAVE 15 — AI/MCP: an MCP server exposing the engine's command surface as
+JSON-RPC tools over stdio (the "AI as a client" leg of the mission):
+typed tool schemas mirroring Command, exact-rational string parameters
+only, the same determinism contracts as the batch shell. Then 16
+scripting, 17 plugins, 18 security, 19 perf, 20 docs/release,
+21 production audit. Land via PR with fmt/clippy/tests green and this
+file updated.
