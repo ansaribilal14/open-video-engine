@@ -4,9 +4,37 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 14 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes / 9 GPU / 10–12 platform-leg evidence / 13 conformance consolidation / 14 headless batch — all landed)
+WAVE: 15 COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11 (3be1a6c); W10–12 = PR #12 (2c228fa); W13–14 = PR #13
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14
+
+## WAVE 15 deltas (2026-09-29) — includes a REAL engine bug fix
+
+1. **ove-mcp (new workspace member)**: the AI-client leg (directive §1 —
+   "AI agents are clients"). Minimal MCP 2024-11-05 stdio subset
+   (initialize / tools/list / tools/call / notifications, JSON-RPC 2.0
+   errors); stateless server (every tool carries `dir` — no hidden
+   sessions); 12 tools mirroring the W14 batch grammar (create_project,
+   add_track, import_media, add_clip, split, resize, move_clip,
+   remove_clip, set_keyframes, undo, redo, get_status). Boundary
+   discipline: rationals are "num/den" STRINGS — a JSON number in a
+   rational field is a typed rejection (ME-7 AT THE AI EDGE, pinned by
+   test); tool errors are isError content; protocol errors are -32601/
+   -32700. Test drives the REAL stdio binary end-to-end (handshake,
+   full edit cycle, undo→redo hash identity, float rejection, error
+   codes, two-fresh-projects determinism).
+2. **REAL ENGINE BUG found and fixed — cross-session redo was a second
+   undo** (found BY the MCP boundary, exactly as the conformance plan
+   predicts): the log fold's Undo branch pushed the INVERSE command onto
+   the reconstructed redo stack; `redo()` applies what it pops, so a
+   redo in a FRESH session re-applied the inverse (no-op-undo) instead
+   of the original. In-session redo was always correct (runtime stack
+   holds the true original) — which is why every prior undo/redo test
+   passed while the CLI/MCP operator contract (one session per
+   invocation) was broken. Fix: the fold pushes the deterministically
+   recovered FORWARD command (`apply(inverse)` returns it). Regression
+   pinned as P-10 (four-session undo→redo→undo hash-exact chain);
+   workspace 158→160 GREEN.
 
 ## WAVE 10–12 deltas (2026-09-29, platform-leg evidence)
 
@@ -523,7 +551,7 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
 3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
 7 audio ✓ → 8 keyframes ✓ → 9 GPU ✓ → 10–12 platform-leg evidence ✓ →
-13 conformance ✓ → 14 headless ✓ → 15 AI/MCP → 16 scripting → 17 plugins →
+13 conformance ✓ → 14 headless ✓ → 15 AI/MCP ✓ → 16 scripting → 17 plugins →
 18 security → 19 perf → 20 docs/release → 21 production audit.
 
 ## Resolved decisions (registry)
@@ -538,6 +566,12 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
   (parity proven on software Vulkan; hardware legs are named residuals).
   Reopen: an adapter diverging from software bytes; den > 65 000 need
   (u64 emulation conversation); present-to-surface platform requirement.
+- Cross-session undo/redo stack reconstruction (2026-09-29, wave 15): the
+  log fold rebuilds undo/redo stacks; Undo marks push the recovered
+  FORWARD command onto the redo stack (never the inverse). Confidence
+  0.95 (P-10 four-session chain + MCP stdio test + full suite green).
+  Reopen: a command family whose inverse does not return the exact
+  forward (would break apply(inverse)→fwd recovery — none exists).
 - WASI log-position policy (2026-09-29, waves 10–12): LogWriter appends via
   explicit seek-to-end, never the O_APPEND flag (wasmtime writes at offset
   0 for persistent append handles — verified, minimized repro). Confidence
@@ -613,10 +647,8 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 15 — AI/MCP: an MCP server exposing the engine's command surface as
-JSON-RPC tools over stdio (the "AI as a client" leg of the mission):
-typed tool schemas mirroring Command, exact-rational string parameters
-only, the same determinism contracts as the batch shell. Then 16
-scripting, 17 plugins, 18 security, 19 perf, 20 docs/release,
-21 production audit. Land via PR with fmt/clippy/tests green and this
-file updated.
+WAVE 16 — scripting: an embedded scripting client (Rhai — pure Rust, no
+FFI) driving the same Engine/command surface the CLI and MCP expose,
+with the same float-rejection and determinism contracts. Then 17
+plugins, 18 security, 19 perf, 20 docs/release, 21 production audit.
+Land via PR with fmt/clippy/tests green and this file updated.
