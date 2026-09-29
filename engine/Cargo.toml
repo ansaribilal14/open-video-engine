@@ -1,10 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["ove-time", "ove-timeline", "ove-media", "ove-decode", "ove-render", "ove-encode", "ove-project", "ove-engine", "ove-cli", "ove-conformance", "ove-mcp"]
+members = ["ove-time", "ove-timeline", "ove-media", "ove-decode", "ove-render", "ove-encode", "ove-project", "ove-engine", "ove-cli", "ove-conformance", "ove-mcp", "ove-script"]
 # ove-project (wave 4) + ove-engine/ove-cli (wave 5) are the last members
 # of the BUILD_PLAN crate set; ove-conformance (waves 10-12) is the
 # cross-platform conformance runner (CROSS_PLATFORM_CONFORMANCE_PLAN §3);
-# ove-mcp (wave 15) is the AI-client leg: MCP tools over stdio JSON-RPC.
+# ove-mcp (wave 15) is the AI-client leg: MCP tools over stdio JSON-RPC;
+# ove-script (wave 16) is the scripting-client leg: Rhai with no_float.
 
 [workspace.package]
 edition = "2021"
