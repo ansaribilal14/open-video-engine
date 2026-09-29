@@ -830,6 +830,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ove-mcp"
+version = "0.1.0"
+dependencies = [
+ "ove-engine",
+ "ove-time",
+ "ove-timeline",
+ "serde_json",
+]
+
+[[package]]
 name = "ove-media"
 version = "0.1.0"
 dependencies = [

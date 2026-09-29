@@ -729,3 +729,72 @@ fn p9_keyframes_save_reopen_hash_equal_and_split_preserved() {
     // exact lerp continuity against the unsplit fade: v(29) = 1 − 29/96·(1/2)
     assert_eq!(v_left_at_29, Some(Rational::new(67, 96)));
 }
+
+// ---------------------------------------------------------------------------
+// P-10: CROSS-SESSION undo/redo (wave 15 boundary finding — the log fold's
+// redo-stack reconstruction must carry the ORIGINAL FORWARD command; the
+// original bug re-applied the inverse, making cross-session redo a second
+// undo). Every CLI/MCP invocation is its own session, so this is the REAL
+// operator contract.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn p10_cross_session_undo_redo_hash_exact() {
+    let dir = tmp_dir("p10-cross-session");
+    let mut e = Project::create(&dir, (24_000, 1)).expect("create");
+    setup_track(&mut e);
+    e.execute(
+        Command::Insert {
+            track: 1,
+            index: 0,
+            clip: Clip::new(1, ticks(48), ticks(0)),
+        },
+        OWNER,
+    )
+    .unwrap();
+    e.execute(
+        Command::Insert {
+            track: 1,
+            index: 1,
+            clip: Clip::new(2, ticks(96), ticks(48)),
+        },
+        OWNER,
+    )
+    .unwrap();
+    let h_after_inserts = e.state_hash();
+    e.execute(
+        Command::Split {
+            track: 1,
+            id: 1,
+            at: ticks(24),
+            new_id: 100,
+        },
+        OWNER,
+    )
+    .unwrap();
+    let h_after_split = e.state_hash();
+    drop(e);
+
+    // session 2: undo (undo marker lands in the log)
+    let mut e2 = Project::open(&dir).unwrap();
+    assert!(e2.undo(OWNER).unwrap(), "session-2 undo must fire");
+    assert_eq!(e2.state_hash(), h_after_inserts);
+    drop(e2);
+
+    // session 3: REDO — re-applies the split exactly (the bug made this a
+    // second undo; the state stayed at h_after_inserts)
+    let mut e3 = Project::open(&dir).unwrap();
+    assert!(e3.redo(OWNER).unwrap(), "session-3 redo must fire");
+    assert_eq!(
+        e3.state_hash(),
+        h_after_split,
+        "cross-session redo must restore the undone state exactly"
+    );
+    drop(e3);
+
+    // session 4: the reopened status agrees, and undo again still works
+    let mut e4 = Project::open(&dir).unwrap();
+    assert_eq!(e4.state_hash(), h_after_split);
+    assert!(e4.undo(OWNER).unwrap(), "chained cross-session undo");
+    assert_eq!(e4.state_hash(), h_after_inserts);
+}

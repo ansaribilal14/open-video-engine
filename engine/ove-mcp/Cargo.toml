@@ -1,0 +1,21 @@
+[package]
+name = "ove-mcp"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["open-video-engine contributors"]
+description = "MCP server for the open-video-engine (wave 15): the engine's command surface as MCP tools over stdio JSON-RPC — AI agents are clients, edit semantics live ONLY in the engine core"
+
+[lib]
+name = "ove_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ove-mcp"
+path = "src/main.rs"
+
+[dependencies]
+ove-engine = { path = "../ove-engine" }
+ove-time = { path = "../ove-time" }
+ove-timeline = { path = "../ove-timeline" }
+serde_json = "1"

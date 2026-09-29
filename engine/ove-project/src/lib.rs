@@ -675,7 +675,7 @@ fn replay_entry(
                 .map_err(ProjectError::SnapshotInvalid)?;
             // apply the embedded inverse; the returned forward command is
             // the deterministic original (exact inverses)
-            let _fwd = tl.apply(&inv).map_err(ProjectError::Timeline)?;
+            let fwd = tl.apply(&inv).map_err(ProjectError::Timeline)?;
             // the popped step should agree with the marker (validate when a
             // step exists; after compaction the stack may have been rebuilt
             // — the embedded inverse is the authority)
@@ -691,7 +691,14 @@ fn replay_entry(
                     });
                 }
             }
-            redo_stack.push(inv);
+            // CROSS-SESSION REDO (wave 15 boundary finding): the redo stack
+            // must receive the ORIGINAL FORWARD command — `redo()` applies
+            // what it pops verbatim. Pushing the inverse here (the original
+            // bug) made a cross-session redo re-apply the INVERSE, i.e.
+            // undo a second time; the runtime path never caught it because
+            // in-session redo uses the runtime stack, which holds the true
+            // original. `fwd` is that original, deterministically recovered.
+            redo_stack.push(fwd);
             Ok(())
         }
         LogPayload::Redo { target, cmd } => {
