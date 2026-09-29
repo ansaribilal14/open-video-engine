@@ -119,6 +119,31 @@ jobs:
         working-directory: engine
         run: cargo test -p ove-render --release --features gpu --test gpu_conformance
 
+  platform-conformance:
+    name: platform conformance (wasm32-wasip1 run + aarch64-android check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1, aarch64-linux-android
+
+      - name: Cache cargo (prefix aligned with rust job, ADR-012)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+          prefix-key: v2-portable-ffmpeg
+
+      # CROSS_PLATFORM_CONFORMANCE_PLAN §3: the canonical scenario must
+      # produce IDENTICAL output (state hashes, exact rationals) natively
+      # and under WASI — plus Android compile evidence for the pure-Rust
+      # core. A diff here is a real cross-platform divergence: fix the
+      # engine, never the diff.
+      - name: Native vs WASI scenario diff + android compile checks
+        run: sh scripts/ci/run_platform_conformance.sh
+
   libav-confinement:
     name: libav* confined to ove-decode (DECODER_SPEC §5)
     runs-on: ubuntu-latest

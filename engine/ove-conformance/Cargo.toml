@@ -1,0 +1,16 @@
+[package]
+name = "ove-conformance"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["open-video-engine contributors"]
+description = "Cross-platform conformance runner: the SAME canonical command/time/hash scenario on every target (host L-0, wasm32-wasip1 L-3, aarch64-android check L-2) — CROSS_PLATFORM_CONFORMANCE_PLAN §3"
+
+[[bin]]
+name = "platform_core"
+path = "src/main.rs"
+
+[dependencies]
+ove-time = { path = "../ove-time", features = ["serde"] }
+ove-timeline = { path = "../ove-timeline" }
+ove-project = { path = "../ove-project" }

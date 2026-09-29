@@ -4,9 +4,38 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 9 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes / 9 GPU — all landed)
+WAVE: 12 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes / 9 GPU / 10–12 platform-leg evidence — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = PR #9 (b5f322f); W8 = PR #10 (00a46b9); W9 = PR #11
+COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = PR #9 (b5f322f); W8 = PR #10 (00a46b9); W9 = PR #11 (3be1a6c); W10–12 = PR #12
+
+## WAVE 10–12 deltas (2026-09-29, platform-leg evidence)
+
+1. **§3 invariants executed across the WASM boundary** (CROSS_PLATFORM_
+   CONFORMANCE_PLAN): new workspace member `ove-conformance` — ONE canonical
+   scenario (batch/split/move/SetKeyframes/resize/remove + undo²→redo² +
+   reopen-replay + exact rational spots), byte-stable KEY=VALUE output.
+   native (L-0) vs wasm32-wasip1 under wasmtime v36.0.1 (L-3 core evidence):
+   **state_hash identical (805d3e65…), REOPEN_HASH identical, keyframe eval
+   identical, time spots identical** — CI job `platform-conformance` REQUIRES
+   the empty diff (`scripts/ci/run_platform_conformance.sh`).
+2. **REAL finding #1 — wasmtime does not honor POSIX O_APPEND on persistent
+   handles**: every log write landed at offset 0 → the L-3 reopen leg failed
+   with `LogCorruption (seq 11 at line 1)`; minimized repro (11 appends → 1
+   line). FIX: LogWriter::open uses create+write-no-truncate + explicit
+   seek-to-end (byte-identical on POSIX single-writer, correct on WASI,
+   kill-9 flush-per-entry unchanged); P-suite 157/157 stays green.
+3. **REAL finding #2 — blake3 C build blocks Android without the NDK**:
+   target-scoped `blake3 = { features = ["pure"] }` for target_os = android
+   (ove-media/ove-project/ove-render) — identical digests, no C toolchain;
+   native keeps the default backend.
+4. **L-2 compile evidence**: ove-time, ove-timeline, ove-media, ove-render,
+   ove-project, ove-conformance all `cargo check` clean for
+   aarch64-linux-android in CI (incl. the software renderer — Android-capable
+   as designed). NOT claimed: DEVICE level (E-004c on-device JNI/MediaCodec/
+   FGS drill — hardware-bound, per the plan's VALIDATION rule).
+5. **NOT claimed**: CROSS_PLATFORM top-level status; L-1 REAL_GPU/transport;
+   browser shells. Full honest status table:
+   research/audit/W10-12_PLATFORM_LEGS_REPORT.md.
 
 ## Session verification record (2026-09-29, fresh continuation #5)
 
@@ -475,9 +504,9 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
 3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
-7 audio ✓ → 8 keyframes ✓ → 9 GPU ✓ → 10–12 platforms → 13 conformance →
-14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
-19 perf → 20 docs/release → 21 production audit.
+7 audio ✓ → 8 keyframes ✓ → 9 GPU ✓ → 10–12 platform-leg evidence ✓ →
+13 conformance → 14 headless → 15 AI/MCP → 16 scripting → 17 plugins →
+18 security → 19 perf → 20 docs/release → 21 production audit.
 
 ## Resolved decisions (registry)
 
@@ -491,6 +520,16 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
   (parity proven on software Vulkan; hardware legs are named residuals).
   Reopen: an adapter diverging from software bytes; den > 65 000 need
   (u64 emulation conversation); present-to-surface platform requirement.
+- WASI log-position policy (2026-09-29, waves 10–12): LogWriter appends via
+  explicit seek-to-end, never the O_APPEND flag (wasmtime writes at offset
+  0 for persistent append handles — verified, minimized repro). Confidence
+  0.95 (native P-suite green + native≡WASI hash parity). Reopen: a runtime
+  with different write-position semantics (the explicit-seek contract is
+  the narrowest portable form for the single-writer model).
+- Android blake3 backend policy (2026-09-29): target-scoped `pure` feature
+  for target_os = android (identical digests; no NDK needed for the pure-
+  Rust core). Confidence 0.9. Reopen: an Android build with the NDK that
+  needs the C path for perf — features are additive, revert is one line.
 - ADR-012 (2026-09-27): CI bundled-FFmpeg portability — wrapper + cache prefix
   + guard. Confidence 0.92. Reopen condition: ffmpeg-sys-next flag change (guard
   fails loudly) or CI SIGILL recurrence.
@@ -556,11 +595,8 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 10–12 — platform legs (BUILD_PLAN wave 8, evidence collection, parallel
-where hardware allows): browser WASM core (timeline+project) + WebCodecs
-adapter behind mandatory runtime feature detection; desktop transport leg;
-Android/MediaCodec per E-004c spike design. Each leg lands behind runtime
-feature detection with typed fallbacks, then WAVE 13 cross-platform
-conformance, 14 headless/batch, 15 AI/MCP, 16 scripting, 17 plugins,
+WAVE 13 — cross-platform conformance consolidation: the §3 invariant table
+now RUNS in CI for native+WASI; extend the corpus subset records per leg,
+then WAVE 14 headless/batch, 15 AI/MCP, 16 scripting, 17 plugins,
 18 security, 19 perf, 20 docs/release, 21 production audit. Land via PR
 with fmt/clippy/tests green and this file updated.

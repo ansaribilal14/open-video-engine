@@ -10,3 +10,9 @@ ove-time = { path = "../ove-time", features = ["serde"] }
 blake3 = "1.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Android leg (waves 10–12): the C blake3 build needs the NDK clang; the
+# `pure` implementation is the same algorithm (identical digests, tested
+# upstream) and needs no C toolchain — scoped to Android targets only.
+[target.'cfg(target_os = "android")'.dependencies]
+blake3 = { version = "1.8", features = ["pure"] }

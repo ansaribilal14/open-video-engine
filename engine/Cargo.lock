@@ -785,6 +785,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ove-conformance"
+version = "0.1.0"
+dependencies = [
+ "ove-project",
+ "ove-time",
+ "ove-timeline",
+]
+
+[[package]]
 name = "ove-decode"
 version = "0.1.0"
 dependencies = [
@@ -834,6 +843,7 @@ dependencies = [
 name = "ove-project"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "ove-media",
  "ove-time",
  "ove-timeline",
