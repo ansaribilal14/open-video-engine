@@ -92,7 +92,7 @@ impl Session {
     }
 
     /// Register the engine API onto a rhai engine (exact rationals only).
-    fn register(mut self, rh: &mut RhaiEngine) {
+    fn register(self, rh: &mut RhaiEngine) {
         // the ONLY rational constructor: integer pairs, den != 0, loud
         rh.register_fn(
             "r",
