@@ -693,8 +693,12 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 16 — scripting: an embedded scripting client (Rhai — pure Rust, no
-FFI) driving the same Engine/command surface the CLI and MCP expose,
-with the same float-rejection and determinism contracts. Then 17
-plugins, 18 security, 19 perf, 20 docs/release, 21 production audit.
-Land via PR with fmt/clippy/tests green and this file updated.
+WAVE 17 — plugins: the plugin-tier research (28_PLUGINS) becomes a
+typed plugin client at the same command-bus boundary (process/WASM
+tier behind the same Engine surface; no new semantics outside the
+command grammar). Before that, every future wave MUST re-run the
+real-world proof (docs/REALWORLD_VALIDATION.md §8 regression rule):
+extend the scenario with the wave's new capabilities and keep every
+existing PASS row green. Then 18 security, 19 perf, 20 docs/release,
+21 production audit. Land via PR with fmt/clippy/tests green and this
+file updated.
