@@ -15,6 +15,9 @@
 //!   * [`exec`]   — the software executor: integer straight-alpha compositing
 //!     onto an opaque output, FrameSource-resolved fetch (D-5 floor rule),
 //!     single color conversion (FRAME_CONTRACT §4.2).
+//!   * [`gpu`]    — the wgpu executor (feature `gpu`, wave 9 / ADR-020):
+//!     the SAME plan on the GPU with the SAME u32 integer arithmetic —
+//!     byte parity with `exec` is the gate; typed feature-detect + fallback.
 //!
 //! v1 honesty notes (documented, not hidden):
 //!   * sources are Cpu RGBA8 (synthetic in tests; real decode binding lands
@@ -32,6 +35,12 @@ pub mod compile;
 pub mod exec;
 pub mod plan;
 
+#[cfg(feature = "gpu")]
+pub mod gpu;
+
 pub use compile::{compile_frame, compile_span, CompileError, Placement, RenderInput, TrackInput};
 pub use exec::{FrameSource, RenderError, SoftwareRenderer};
 pub use plan::{OutputSpec, Pass, PassKind, RenderPlan, RenderSpan, SourceId, SurfaceId};
+
+#[cfg(feature = "gpu")]
+pub use gpu::{GpuError, GpuRenderer, MAX_ALPHA_DEN, MAX_TEXTURE_DIM};

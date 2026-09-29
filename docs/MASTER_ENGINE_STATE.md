@@ -4,9 +4,65 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 8 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes — all landed)
+WAVE: 9 COMPLETE (0 / 0.5 / 0.6 / 1 seam / 2 render / 3 encode / 4 project / 5 engine+cli / 6 vertical slice / 7 audio / 8 keyframes / 9 GPU — all landed)
 DATE: 2026-09-29
-COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = PR #9 (b5f322f); W8 = PR #10 (00a46b9)
+COMMIT: W3 = PR #5 (d0f1ce0); W4 = PR #6 (37d1e59a); W5 = PR #7 (ae7c1d9); W6 = PR #8; W7 = PR #9 (b5f322f); W8 = PR #10 (00a46b9); W9 = PR #11
+
+## Session verification record (2026-09-29, fresh continuation #5)
+
+All W0–W8 claims re-verified from scratch before Wave 9 work:
+
+- HEAD `160c898` on main; takeover baseline `33fde9d` IS an ancestor
+  (38 commits since); tree clean; wave-8-keyframes fully merged.
+- GitHub Actions check-runs on exact HEAD `160c898`: all 3 jobs SUCCESS
+  (cargo-audit, fmt+clippy+tests libav-linked, libav-confinement).
+- Local (rebuilt container: rustup 1.98.1, system FFmpeg 7.1.5 dev libs via
+  DEV_ENV.md unprivileged recipe): 157/157 tests GREEN · fmt GREEN · clippy
+  (workspace, all targets) GREEN. W8 claim confirmed exactly.
+
+## WAVE 9 deltas (2026-09-29, ADR-020)
+
+1. **GPU reference executor exists and is BYTE-PARITY-Proven**
+   (ove-render::gpu, feature `gpu`, wgpu 25 + pollster optional):
+   `GpuRenderer::execute_frame` consumes the SAME RenderPlan and replicates
+   exec.rs arithmetic exactly — Rgba8Uint textures (no float normalization),
+   u32 blend pipeline (`d = 255·den`, `n_s = min(sa·a_num, d)`, `inv = d−n_s`,
+   `out = (cs·n_s + cd·inv + d/2)/d`, alpha forced 255), integer translate
+   with bounds clip, ColorConvert as tag stamp, coordinates from
+   `@builtin(position)` (E-005 rule). Surface placement model: fetch surfaces
+   are native-size (native bounds-check ≡ software's transparent-padded
+   paste-at-origin); transform/blend targets are output-sized with content
+   already placed — later passes sample directly (the first implementation
+   double-counted the translation; the parity suite caught it at pixel 19).
+2. **Typed bound + fallback**: u32 arithmetic bounds the blend to reduced
+   den ≤ 65 000 (MAX_ALPHA_DEN; worst case 255·d + d/2 = 65 152.5·den < 2³²);
+   exceeding it is `GpuError::UnsupportedAlphaDen` BEFORE any GPU work —
+   software executes it instead (G-7 pins the fallback). `GpuRenderer::new()`
+   → typed `NoAdapter` when feature-detect fails (verified in this container:
+   no ICD → typed error; lavapipe ICD → adapter). GPU pass errors REUSE the
+   software error set (G-6: identical TagMismatch from both executors).
+3. **Parity suite G-1..G-8** (ove-render/tests/gpu_conformance.rs, tolerance
+   0 vs software on every test): single layer; transforms incl. negative
+   offsets + edge clipping; fractional alphas (1/3, 2/3, 1/2, 127/128,
+   1/1000); three-layer stack with declared convert; retime frame selection
+   (RG-4 via GPU); error parity; den-bound typed error + software fallback;
+   span-level blake3 hash equality. **8/8 GREEN on Mesa lavapipe** (rootless,
+   E-005 recipe) in this container.
+4. **CI grows a dedicated `gpu-conformance` job** (ubuntu-latest + sudo
+   apt mesa-vulkan-drivers): clippy (gpu feature) + the parity suite. The
+   main pipeline is untouched (`--features ove-decode/bundled` never enables
+   gpu) — zero risk to its cache/timing; the GPU leg gets its own signal.
+5. **Perf honesty**: `examples/gpu_perf_probe.rs` stamps
+   every line with the adapter class; committed record
+   research/experiments/W9_gpu_perf_record.txt carries the llvmpipe numbers
+   explicitly marked INVALID for any perf claim; real-hardware ratio gates
+   (doc 45 T-7) stay a hardware-bound residual.
+6. **Engine wiring deferred to platform waves** (recorded in ADR-020 §8):
+   backend selection per platform rides waves 10–12 behind the same typed
+   contract; wave 6's gate was parity + bench + fallback, all delivered.
+7. Test IDs: gpu_conformance G-1..G-8 (8 tests; workspace count 157→165
+   with the gpu feature enabled, 157 default unchanged). Files: gpu.rs
+   (~700 l), gpu_conformance.rs (~530 l), 2 examples, ADR-020, CI job.
 
 ## Session verification record (2026-09-29, fresh continuation #4)
 
@@ -404,21 +460,35 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
    data duplication at every cut inside an animation (accepted v1 cost).
 3. OpenH264/SVT-AV1 encoder legs; E-6 kill-resume execution at segment
    granularity (checkpoint fields exist).
-4. Mutation-style "test the tests" not yet systematic.
-5. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
-6. GitHub PAT used across chat sessions must be rotated by the owner
+4. GPU residuals (ADR-020): YUV GPU conversion + fractional scaling with
+   declared tolerance + zero-copy frame import (hardware/driver legs);
+   real-hardware perf baselines (llvmpipe record is INVALID-class);
+   engine/platform backend selection rides waves 10–12.
+5. Mutation-style "test the tests" not yet systematic.
+6. Hardware-bound experiment residuals (E-004c/E-005/E-006b).
+7. GitHub PAT used across chat sessions must be rotated by the owner
    (standing security rule, DEV_ENV.md) — outside engine scope, flagged.
 
 ## Current wave order (directive §37, unchanged)
 
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
 3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
-7 audio ✓ → 8 keyframes ✓ → 9 GPU → 10–12 platforms → 13 conformance →
+7 audio ✓ → 8 keyframes ✓ → 9 GPU ✓ → 10–12 platforms → 13 conformance →
 14 headless → 15 AI/MCP → 16 scripting → 17 plugins → 18 security →
 19 perf → 20 docs/release → 21 production audit.
 
 ## Resolved decisions (registry)
 
+- ADR-020 (2026-09-29): GPU reference executor v1 — ove-render::gpu behind
+  feature `gpu` (wgpu 25), Rgba8Uint + u32 integer blend identical to
+  software, `@builtin(position)` coordinates, native-size fetch surfaces /
+  output-sized placed targets (no accumulated offset), typed den bound
+  MAX_ALPHA_DEN = 65 000 with software fallback, typed NoAdapter
+  feature-detect, error-set reuse, CI gpu-conformance job on lavapipe,
+  perf probe with INVALID-class software-adapter stamping. Confidence 0.9
+  (parity proven on software Vulkan; hardware legs are named residuals).
+  Reopen: an adapter diverging from software bytes; den > 65 000 need
+  (u64 emulation conversation); present-to-surface platform requirement.
 - ADR-012 (2026-09-27): CI bundled-FFmpeg portability — wrapper + cache prefix
   + guard. Confidence 0.92. Reopen condition: ffmpeg-sys-next flag change (guard
   fails loudly) or CI SIGILL recurrence.
@@ -484,9 +554,11 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 9 — GPU upgrade (BUILD_PLAN wave 6): wgpu compositor consuming the
-same FrameEnvelope; WGSL passes mirroring the software path; correctness
-suite = the same golden frames (software stays the correctness
-reference); separate perf bench with committed baselines; feature-detect
-+ fallback. Land via PR with fmt/clippy/tests green and this file
-updated, then WAVE 10–12 (platform legs).
+WAVE 10–12 — platform legs (BUILD_PLAN wave 8, evidence collection, parallel
+where hardware allows): browser WASM core (timeline+project) + WebCodecs
+adapter behind mandatory runtime feature detection; desktop transport leg;
+Android/MediaCodec per E-004c spike design. Each leg lands behind runtime
+feature detection with typed fallbacks, then WAVE 13 cross-platform
+conformance, 14 headless/batch, 15 AI/MCP, 16 scripting, 17 plugins,
+18 security, 19 perf, 20 docs/release, 21 production audit. Land via PR
+with fmt/clippy/tests green and this file updated.
