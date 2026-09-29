@@ -4,9 +4,55 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 15 COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP — all landed)
-DATE: 2026-09-29
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14
+WAVE: 16 COMPLETE + REALWORLD VALIDATION WAVE (RLW-1) COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting — all landed; RLW-1 = real-world reference media proof wired in permanently)
+DATE: 2026-09-30
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = this PR
+
+## REALWORLD VALIDATION WAVE (RLW-1) deltas (2026-09-30) — includes THREE REAL engine bug fixes
+
+1. **Permanent real-world reference media workflow** (directive mandate:
+   every wave stays connected to real media): docs/REALWORLD_VALIDATION.md
+   (protocol + provenance + evidence log + regression rule),
+   scripts/realworld/{acquire_source.sh,baseline_facts.py,verify_output.py},
+   engine/ove-engine/tests/realworld.rs (env-gated; CI stays corpus-only).
+   Source: NASA "Artemis I Moon Mission: Launch to Splashdown Highlights"
+   (public domain, 1280×720 H.264 CFR 24000/1001, AAC 44.1k stereo, sha256
+   2d315daf…705f) acquired via ytagent 0.3.0 — direct chain blocked by the
+   datacenter-IP bot-wall; the github_actions_farm tier worked (personal
+   deployment of ytagent's farm workflow, WARP + android_vr + manual GVS PO
+   token, farm run 36640479906). Media never enters git; provenance-gated.
+2. **REALWORLD-BUG-1 (probe-vs-fetch color-tag lie)**: build_render_input
+   declared RAW probe tags as the fetch contract while the boundary
+   conversion stamps {src primaries/transfer, Bt709, Full} — any REAL source
+   whose probe range equals the working-space range omitted the ColorConvert
+   stamp pass and exec failed TagMismatch. The synthetic corpus (tag-Unknown)
+   made every existing test pass vacuously. FIX: the plan declares
+   boundary_rgba_stamp(video.color) — the tags fetch actually delivers.
+3. **REALWORLD-BUG-2 (level crush on Full-range sources)**: YUV→RGBA
+   hardwired LIMITED expansion regardless of declared range. FIX: range-aware
+   integer conversion (Limited/Full exact; Unknown keeps the documented
+   limited assumption). Pins: limited_black_maps_to_zero,
+   full_range_luma_is_identity, stamp_matches_converted_envelope.
+4. **REALWORLD-BUG-3 (D-5 floor unreachable on real NTSC media)**: fetch
+   seeked EXACTLY at the mapped target; real NTSC targets fall BETWEEN frame
+   pts and the adapter's Exact seek forward-drops frames ≤ target (D-4), so
+   the floor frame was never delivered (SourceFrameMissing). FIX: fetch lands
+   at the greatest keyframe ≤ target (the ADR-013 plan_seek discipline) and
+   decodes forward; sequential same-GOP targets reuse the cursor; backward
+   targets re-seek.
+5. **Proof evidence (all verified)**: edit sequence (split/resize/keyframed
+   overlay with exact sample-boundary cuts) → undo×4/redo×4 hash identity →
+   spot renders deterministic → A/V export 160 frames + both durations exact
+   → WAV 294,294 samples exact → reopen SAME state hash → re-export
+   byte-identical (sha256 baf23d2a…, stable across runs) → independent
+   ffprobe verification (160 frames, 24000/1001, clean -xerror decode,
+   container 6.673333 s) → visual sanity PASS (40 %/53 % mid-fade blends and
+   keyframed pan geometry verified by frame inspection). H.264 stream-copy
+   export = typed rejection pinned (v1 mpeg4/aac surface, ADR-015).
+   RW-NOTE-1 recorded: Split's right half has no clip_assets binding (inert
+   under v1 single-source render; must close before render-by-binding).
+6. Workspace **165/165** GREEN with the new tests; fmt GREEN; clippy GREEN
+   (workspace, all targets).
 
 ## WAVE 15 deltas (2026-09-29) — includes a REAL engine bug fix
 

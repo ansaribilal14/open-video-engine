@@ -1,0 +1,180 @@
+# REALWORLD VALIDATION — the permanent real-world reference media workflow
+
+> Directive rule (real-world proof task): EVERY WAVE MUST REMAIN CONNECTED TO
+> REAL MEDIA. A wave is not complete if it silently breaks the real-video
+> workflow. This file is the protocol, the provenance record, and the
+> per-wave evidence log.
+
+## 1. Mission
+
+Answer one question with evidence, per wave:
+
+> Can the actual OVE engine take an ordinary real-world video and process it
+> with the capabilities that genuinely exist today?
+
+This is not a demo. The reference media is ordinary real-world footage with
+real cadence, real color metadata, real GOP structure, and real audio — the
+exact conditions the committed synthetic corpus cannot reproduce.
+
+## 2. Reference source — provenance record (WAVE-RLW-1, 2026-09-29)
+
+| Field | Value |
+|---|---|
+| YouTube URL | https://www.youtube.com/watch?v=jrDv0OdMt5s |
+| Title | NASA's Artemis I Moon Mission: Launch to Splashdown Highlights |
+| Channel | NASA (official) |
+| Publication | Nov 2022 (Artemis I launch day highlights) |
+| License | Public domain — NASA media are works of the U.S. Government not protected by copyright (17 U.S.C. § 105; NASA Media Usage Guidelines). Download/testing/redistribution permitted. |
+| Why this source | Real camera footage; launch + flight + splashdown scene changes; fine detail (tower structure, rocket skin, crowds); gradients (night sky, fireball); natural audio (comms + ambience); real consumer cadence (NTSC 24000/1001); 2 min 3 s — enough to exercise seeking without being enormous. |
+| Selection rejections | Commercial/copyrighted footage rejected on license grounds; synthetic test assets rejected by task definition. |
+| Acquisition tool | ytagent 0.3.0 (yt-dlp 2026.8.19) — the external acquisition mechanism; OVE grows no downloader |
+| Acquisition path | Tier 1 (13-method chain) exhausted by datacenter-IP bot-blocks + 429 rate limits; Tier 2: ytagent `github_actions_farm` method against a personal deployment of ytagent's `yt-download-farm.yml` workflow (farm run 36640479906; WARP proxy + `android_vr` client + manual GVS PO token from the BGutil POT server). Artifact returned as unmerged DASH parts (136 = 720p avc1, 140 = AAC m4a; the runner image lacks ffmpeg). Normalized locally with `ffmpeg -c copy` (stream copy only, no re-encode). |
+| Source identity | sha256 `2d315daf6130366d9a98c9f49716aa263036ba5fef8f241cefff727bc3b4705f`, 7,917,702 bytes |
+| OVE asset identity | BLAKE3 `7f89f3726f09dbe6a79f660ebb86b59ff1aaa4a137d498289796390230cec0a1` (content-addressed import) |
+| Media on git | NEVER. `*.mp4` is repo-ignored; the source is reproducible from this provenance record + the acquisition script. |
+
+## 3. Independent baseline (ffprobe — OVE is never the authority)
+
+| Property | Value |
+|---|---|
+| Container | mov/mp4, faststart |
+| Video | H.264 Main, 1280×720, yuv420p |
+| Cadence | CFR 24000/1001 (r = avg = 24000/1001), tbn 1/24000 |
+| Frames | 2945 decoded |
+| Keyframes | 48 (GOP ≈ 2.9–3.4 s), first at 0.0 |
+| Color metadata | range=tv (LIMITED), bt709/bt709/bt709, chroma left (stream AND all 2945 frames) |
+| Audio | AAC LC, 44100 Hz, stereo, 5,419,008 samples (122.88 s exactly) |
+| Duration | 122.88 s container; 122.831 s video |
+| Decode | clean end-to-end (`ffmpeg -xerror`) |
+
+## 4. The permanent test
+
+`engine/ove-engine/tests/realworld.rs` — one canonical deterministic scenario,
+env-gated so CI stays corpus-only:
+
+```
+OVE_REALWORLD_SOURCE=<source.mp4> \
+OVE_REALWORLD_EXPECT=<baseline_facts.json>   # from scripts/realworld/baseline_facts.py
+OVE_REALWORLD_OUT=<artifact dir> \
+cargo test -p ove-engine --release --test realworld
+```
+
+Scenario (exact parameters, tick axis 24000/1, output 1280×720 @ 24000/1001,
+span 160 output frames = 160160 ticks = 6.673333 s):
+
+1. create project + 2 tracks; import real source (probe vs INDEPENDENT
+   baseline: geometry, cadence, audio rate/channels, keyframe index);
+2. track 1 (bottom layer = v1 audio lane, contiguous, every cut sample-exact
+   at 44100): clip1 [0,2.0) src 0–2 · clip2 [2,3.5) src 8–9.5 · SPLIT at
+   2.75 · RESIZE right half to 1.0 s · clip4 [3.75, 6.6733) src 20–22.9067;
+3. track 2 (overlay): filler [0,1) src 40–41 (opacity Hold 0) + overlay
+   [1,3.5) src 30–32.5 with SetKeyframes opacity (0→1→1→0, Linear) +
+   x pan (−640→640 over 1.9 s) + y drift (30→90);
+4. exact source-mapping spot checks (ADR-013 windows);
+5. undo ×4 → pre-keyframe hash · redo ×4 → final hash (hash identity);
+6. spot renders at 0 / 2.5 / 5.0 s (RGBA, geometry, non-black) +
+   determinism (same t → identical BLAKE3);
+7. `export_reencode` 160 frames → MP4 (mpeg4 CRF6 bitexact + AAC 128k CBR):
+   frame count, video duration, audio duration all EXACT;
+8. `export_wav` → 294,294 s16 samples (== span × 44100, exact);
+9. `export_copy` → TYPED rejection on H.264 (v1 mpeg4/aac copy surface,
+   ADR-015 — honest unsupported, pinned);
+10. save → drop → reopen: SAME state hash, bindings alive, keyframed overlay
+    re-render byte-identical;
+11. re-export after reopen → file sha256 == first export (deterministic
+    software pipeline);
+12. machine-readable record → `$OVE_REALWORLD_OUT/realworld_record.json`.
+
+## 5. Wave-RLW-1 results (2026-09-29, commit at HEAD c4b1d48 + this wave)
+
+| Check | Result |
+|---|---|
+| import/probe vs independent baseline | PASS (geometry/cadence/audio/keyframes exact) |
+| timeline edits (split/resize/move-free, keyframes) | PASS |
+| undo/redo hash identity | PASS (4× round trip) |
+| spot renders + determinism | PASS |
+| re-encode export (A/V) | PASS — 160 frames, 6.673333 s both durations exact at the engine layer |
+| WAV export | PASS — 294,294 samples exactly |
+| persistence / reopen | PASS — same state hash, keyframes alive, byte-identical re-render |
+| deterministic re-export | PASS — file sha256 identical (`baf23d2a…`) |
+| independent output decode | PASS — ffprobe: 160 frames, 24000/1001, container 6.673333 s, clean `-xerror` decode |
+| A/V duration relationship | PASS — video 6.673333 s; AAC stream 6.672993 s (Δ 15 samples ≈ 0.3 ms, one-granule edit-list accounting; WAV carries the exact 294,294) |
+| visual sanity (9 output frames + mid-fade pair) | PASS — composites, fades (40 %/53 % blends verified visually), pan geometry lands on the computed pixel, no corruption/frozen/black frames |
+| stream-copy export of H.264 | NOT YET IMPLEMENTED — typed rejection pinned (v1 = mpeg4/aac, ADR-015) |
+| GPU parity on this media | N/A this wave (engine wiring is a platform-wave item; parity suite is corpus-level) |
+
+## 6. Real defects found by real media (the point of this workflow)
+
+| ID | Defect | Fix | Pin |
+|---|---|---|---|
+| REALWORLD-BUG-1 | Render plans declared the RAW probe color tags as the fetch contract, but the boundary conversion stamps fetched frames {src primaries/transfer, Bt709, Full}. Whenever probe range == working-space range (ANY real file with real LIMITED metadata), the plan omitted the ColorConvert stamp pass and exec failed `TagMismatch`. The synthetic corpus probes tag-Unknown — every existing test took the convert branch vacuously. | `build_render_input` now declares `boundary_rgba_stamp(video.color)` — the tags fetch actually delivers (single source of truth shared with the conversion). | `boundary_stamp_tests::stamp_matches_converted_envelope` |
+| REALWORLD-BUG-2 | YUV→RGBA conversion hardwired LIMITED-range expansion even for declared FULL-range sources (level crush on real consumer media that declares Full). | Range-aware integer expansion (Limited / Full exact; Unknown keeps the documented limited assumption). | `limited_black_maps_to_zero`, `full_range_luma_is_identity` |
+| REALWORLD-BUG-3 | `DecodeSource::fetch` seeked EXACTLY at the mapped target; on real NTSC media the target falls BETWEEN frame pts and the adapter's Exact seek forward-drops frames ≤ target (D-4) — the D-5 floor frame was never delivered (`SourceFrameMissing`). Corpus targets were always exact frame pts. | Fetch now lands at the greatest keyframe ≤ target (the ADR-013 `plan_seek` discipline) and decodes forward keeping the last frame ≤ target; sequential same-GOP targets reuse the decoder position; targets at/before the last floor re-seek. | the realworld test itself (renders the NTSC source end-to-end) |
+
+RW-NOTE-1 (recorded, unfixed by design this wave): `record_entry_bindings`
+does not consume Split's right half — `clip_assets` has no entry for the new
+clip id (5 of 6 clips). Inert under the v1 single-source render; MUST be
+closed before multi-source render-by-binding lands (it would bind the wrong
+source). Assertion in the realworld test documents the current count.
+
+## 7. Capability matrix (as exercised by THIS wave)
+
+| Capability | Status |
+|---|---|
+| Asset ingestion + BLAKE3 content identity | IMPLEMENTED, TESTED, EXERCISED |
+| Media probing (streams/keyframes/VFR/color tags) | IMPLEMENTED, TESTED, EXERCISED |
+| Timeline insertion / split / resize / remove surface | IMPLEMENTED, TESTED, EXERCISED (explicit ids) |
+| Exact rational timing + NTSC cadence | IMPLEMENTED, TESTED, EXERCISED |
+| Source time mapping (ADR-013) | IMPLEMENTED, TESTED, EXERCISED |
+| Keyframe animation (opacity/x/y, Linear/Hold) | IMPLEMENTED, TESTED, EXERCISED |
+| Undo/redo with hash identity | IMPLEMENTED, TESTED, EXERCISED |
+| Frame decoding → FrameEnvelope → boundary conversion | IMPLEMENTED, TESTED, EXERCISED (after REALWORLD-BUG-1/3 fixes) |
+| RenderPlan compile + software render | IMPLEMENTED, TESTED, EXERCISED |
+| A/V re-encode export (mpeg4 + AAC, exact durations) | IMPLEMENTED, TESTED, EXERCISED |
+| WAV/PCM export (sample-exact) | IMPLEMENTED, TESTED, EXERCISED |
+| Project persistence, kill-safe logs, reopen replay | IMPLEMENTED, TESTED, EXERCISED |
+| Deterministic re-export | IMPLEMENTED, TESTED, EXERCISED |
+| CLI / batch / MCP / Rhai clients | IMPLEMENTED, TESTED (corpus-level) — not exercised by this test yet |
+| Stream-copy export of H.264 sources | NOT YET IMPLEMENTED — typed rejection (pinned) |
+| Multi-track audio mixing, audio retime | NOT YET IMPLEMENTED (ADR-018 gaps) |
+| GPU rendering wired into the engine | NOT YET IMPLEMENTED at engine level (parity suite exists) |
+| Scaling/affine transforms | NOT YET IMPLEMENTED (integer translate only) |
+| H.264/AV1 encoding out | NOT YET IMPLEMENTED (v1 mpeg4-first, ADR-015) |
+
+## 8. Regression rule
+
+For every future major wave: re-run this test against the SAME source
+(re-acquire via `scripts/realworld/acquire_source.sh` if the local copy is
+gone — the sha256 in §2 is the identity gate), add the newly implemented
+capabilities to the scenario, extend §5 with a new wave-RLW row, and keep the
+previous records (the machine-readable `realworld_record.json` per run is the
+evidence trail). A wave that regresses any PASS row above is not complete
+unless the change is an intentional, documented contract change.
+
+## 9. Reproducibility
+
+```bash
+# 1. acquire (never commits media; identity-gated)
+scripts/realworld/acquire_source.sh "https://www.youtube.com/watch?v=jrDv0OdMt5s" /tmp/rlw/source
+sha256sum -c   # must equal 2d315daf…705f (§2)
+
+# 2. independent baseline facts (ffprobe authority)
+scripts/realworld/baseline_facts.py <baseline_dir> baseline_facts.json
+
+# 3. run the permanent proof
+OVE_REALWORLD_SOURCE=/tmp/rlw/source/source.mp4 \
+OVE_REALWORLD_EXPECT=baseline_facts.json \
+OVE_REALWORLD_OUT=/tmp/rlw/proof \
+cargo test -p ove-engine --release --test realworld
+
+# 4. independent output verification + visual frames
+scripts/realworld/verify_output.py /tmp/rlw/proof <source.mp4>
+```
+
+Environment notes (2026-09-29): datacenter IPs are hard-blocked by YouTube
+(429 + LOGIN_REQUIRED); the ytagent farm tier (WARP + android_vr + manual GVS
+PO token) is the observed-working acquisition path. GitHub's 2026 runner
+images lack ffmpeg — the farm returns unmerged DASH parts; normalization is a
+local stream copy. The YouTube-side JSON license metadata could not be
+fetched from this environment; the public-domain status rests on NASA's
+published media guidelines (recorded above).

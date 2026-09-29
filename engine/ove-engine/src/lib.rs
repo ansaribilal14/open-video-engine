@@ -397,11 +397,21 @@ impl Engine {
                     source: source_id_of(hex),
                     alpha,
                     offset: (ox, oy),
+                    // The plan must declare the tags the FETCH will actually
+                    // deliver: the boundary conversion (yuv420p_to_rgba) emits
+                    // RGBA stamped {src primaries/transfer, Bt709, Full}.
+                    // Declaring the raw probe tags here made the plan omit the
+                    // ColorConvert stamp pass whenever the probe range happened
+                    // to equal the working-space range — and exec then failed
+                    // with TagMismatch on ANY real source carrying real color
+                    // metadata (found by the real-world reference media test;
+                    // the synthetic corpus probes tag-Unknown and could not
+                    // see it). See REALWORLD-BUG-1 in docs/REALWORLD_VALIDATION.md.
                     src_color: video
                         .video
                         .as_ref()
-                        .map(|v| v.color)
-                        .unwrap_or(all_unknown_color()),
+                        .map(|v| boundary_rgba_stamp(v.color))
+                        .unwrap_or_else(all_unknown_color),
                 });
                 let _ = pos;
             });
@@ -955,11 +965,36 @@ fn eval_geometry(
 // ---------------------------------------------------------------------------
 
 /// One decode-backed source. Interior mutability = the decoder session +
-/// last-decoded frame cache; single-writer (v1), so RefCell is sound here.
+/// its seek/decode cursor; single-writer (v1), so RefCell is sound here.
 struct DecodeSource<'a> {
     dir: &'a Path,
     media: &'a SourceMedia,
-    session: std::cell::RefCell<Option<(FfmpegSwDecoder, Rational)>>,
+    session: std::cell::RefCell<Option<VideoSession>>,
+}
+
+/// The live decode cursor for one source: where the decoder is landed (the
+/// keyframe floor of the last seek) and the pts of the last floor delivered.
+struct VideoSession {
+    dec: FfmpegSwDecoder,
+    landed: Rational,
+    last_floor_pts: Rational,
+}
+
+/// Greatest keyframe pts <= target (the ADR-013 landing discipline); the
+/// stream start (0) when no keyframe precedes the target.
+fn keyframe_floor_of(media: &SourceMedia, target: Rational) -> Rational {
+    media
+        .probe
+        .keyframe_index
+        .as_ref()
+        .and_then(|idx| {
+            idx.entries
+                .iter()
+                .map(|e| e.pts)
+                .rev()
+                .find(|&k| k <= target)
+        })
+        .unwrap_or_else(|| Rational::zero(1))
 }
 
 impl<'a> DecodeSource<'a> {
@@ -991,38 +1026,59 @@ impl<'a> DecodeSource<'a> {
 impl FrameSource for DecodeSource<'_> {
     /// The D-5 floor rule: return the frame with the GREATEST pts ≤ target
     /// (exact hits are the common CFR case; multi-rate sources floor).
-    /// A fresh session per render pass (v1 simplicity; decode buffering
-    /// across a whole export is a perf-wave concern — recorded).
+    ///
+    /// REALWORLD-BUG-3 (found by the real-world reference media test): the
+    /// previous fetch sought EXACTLY at the mapped target. On real NTSC
+    /// media the mapped target usually falls BETWEEN frame pts, and the
+    /// decoder's Exact seek forward-drops everything ≤ target (D-4) — so
+    /// the floor frame was never even delivered and fetch returned None
+    /// (SourceFrameMissing). The synthetic corpus always seeked to exact
+    /// frame pts and could not see this. The ADR-013 discipline is the
+    /// keyframe-FLOOR landing (plan_seek): land at the greatest keyframe
+    /// ≤ target, then decode FORWARD keeping the last frame ≤ target.
+    /// Sequential same-GOP targets reuse the decoder position; a target
+    /// at/before the last delivered floor re-seeks (backward jumps).
     fn fetch(&self, target: Rational) -> Option<FrameEnvelope> {
+        let land = keyframe_floor_of(self.media, target);
         let mut session = self.session.borrow_mut();
         if session.is_none() {
             let dec = self.open_decoder().ok()?;
-            *session = Some((dec, Rational::new(-1, 1)));
+            *session = Some(VideoSession {
+                dec,
+                landed: Rational::new(-1, 1),
+                last_floor_pts: Rational::new(-1, 1),
+            });
         }
-        let (dec, _last_pts) = session.as_mut().expect("just set");
-
-        dec.seek(target, SeekMode::Exact).ok()?;
+        let s = session.as_mut().expect("just set");
+        if s.landed != land || target <= s.last_floor_pts {
+            s.dec.seek(land, SeekMode::Exact).ok()?;
+            s.landed = land;
+        }
         let mut floor: Option<FrameEnvelope> = None;
-        loop {
-            let frame = dec.next().ok().flatten()?;
+        // A decode error or EOF after a floor exists still returns the floor:
+        // real edits can end on the source's last frame.
+        while let Ok(Some(frame)) = s.dec.next() {
             if frame.pts > target {
-                // decoded past the target: the previous decoded frame is
-                // the floor (D-5); None only when the target precedes the
-                // first frame — the contract's honest empty answer.
-                return floor;
+                // decoded past the target: the last frame ≤ target
+                // is the floor (D-5); None only when the target
+                // precedes the first frame — the honest empty answer.
+                break;
             }
-            if frame.pts == target {
-                return yuv_to_rgba(&frame);
-            }
-            // pts < target: keep it as the running floor (D-4 forward drop)
+            // pts ≤ target: keep it as the running floor; convert
+            // at the engine boundary (the single declared swap).
             floor = yuv_to_rgba(&frame);
         }
+        if let Some(f) = &floor {
+            s.last_floor_pts = f.pts;
+        }
+        floor
     }
 }
 
 /// YUV420P → RGBA8, integer-only (deterministic on every platform).
-/// Limited-range studio swap with the matrix chosen from the frame's
-/// declared tags; Unknown → BT.601 (the SD convention). Chroma upsample =
+/// Range-aware expansion (declared Limited vs Full; declared-Unknown keeps
+/// the limited assumption) with the matrix chosen from the frame's declared
+/// tags; Unknown matrix → BT.601 (the SD convention). Chroma upsample =
 /// nearest (replicate) — declared v1 limitation, ADR-017.
 pub fn yuv420p_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
     if frame.pixel_format != PixelFormat::Yuv420p || frame.memory != FrameMemory::Cpu {
@@ -1039,16 +1095,21 @@ pub fn yuv420p_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
     let u_plane = &fb.data[u_off..u_off + fb.strides[1] * (h.div_ceil(2))];
     let v_plane = &fb.data[v_off..];
 
-    let (kr, kb): (i32, i32) = match frame.color.matrix {
-        ove_media::MatrixCoeffs::Bt709 => (2104, 1613), // fixed-point s15: kr<<16 / (1-kr-kb)
-        _ => (2104, 1546),                              // BT.601 default
-    };
-    let _ = (kr, kb);
-    // Limited-range integer coefficients (x256), per matrix:
+    // Range-aware expansion (REALWORLD-BUG-2): the previous math hardwired
+    // the LIMITED-range expansion even for declared Full-range sources —
+    // real consumer media does declare Full, and the levels were crushed.
+    // Declared-Unknown keeps the limited assumption (documented v1 policy;
+    // unknown-as-value, never invented — but a guess must stay visible).
+    let full_range = frame.color.range == ove_media::Range::Full;
+    // Fixed-point s15:16 coefficients per matrix (BT.601 default).
     let (cr, cb, cu, cv): (i32, i32, i32, i32) = match frame.color.matrix {
-        ove_media::MatrixCoeffs::Bt709 => (298, 496, 55, 139),
-        _ => (298, 516, 100, 208),
+        ove_media::MatrixCoeffs::Bt709 if !full_range => (298, 496, 55, 139),
+        ove_media::MatrixCoeffs::Bt709 => (256, 454, 88, 183),
+        _ if !full_range => (298, 516, 100, 208),
+        _ => (256, 472, 86, 177),
     };
+    let y_shift: i32 = if full_range { 0 } else { 16 };
+    let c_shift: i32 = 128; // chroma always centers on 128
 
     let mut rgba = Vec::with_capacity(w * h * 4);
     for y in 0..h {
@@ -1056,9 +1117,9 @@ pub fn yuv420p_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
         let urow = &u_plane[(y / 2) * fb.strides[1]..][..w.div_ceil(2)];
         let vrow = &v_plane[(y / 2) * fb.strides[2]..][..w.div_ceil(2)];
         for x in 0..w {
-            let yy = yrow[x] as i32 - 16;
-            let uu = urow[x / 2] as i32 - 128;
-            let vv = vrow[x / 2] as i32 - 128;
+            let yy = yrow[x] as i32 - y_shift;
+            let uu = urow[x / 2] as i32 - c_shift;
+            let vv = vrow[x / 2] as i32 - c_shift;
             let r = (cr * yy + cv * vv + 128) >> 8;
             let g = (cr * yy - cu * uu - cv * vv + 128) >> 8;
             let b = (cr * yy + cb * uu + 128) >> 8;
@@ -1069,11 +1130,9 @@ pub fn yuv420p_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
         }
     }
 
-    // RGBA output carries the WORKING-space tags (the boundary conversion is
-    // the declared single conversion; the plan sees consistent RGBA).
-    let mut out_tags = frame.color;
-    out_tags.matrix = ove_media::MatrixCoeffs::Bt709;
-    out_tags.range = ove_media::Range::Full;
+    // RGBA output carries the BOUNDARY STAMP (see boundary_rgba_stamp): the
+    // plan declares exactly these tags, so the single-conversion rule stays
+    // honest end to end.
     Some(FrameEnvelope::video_cpu(
         frame.pts,
         frame.duration,
@@ -1082,7 +1141,7 @@ pub fn yuv420p_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
         frame.height,
         PixelFormat::Rgba,
         frame.bit_depth,
-        out_tags,
+        boundary_rgba_stamp(frame.color),
         ove_media::FrameBytes {
             data: rgba,
             strides: vec![w * 4],
@@ -1093,7 +1152,97 @@ pub fn yuv420p_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
     ))
 }
 
+/// The tags the YUV→RGBA boundary conversion stamps onto its output: source
+/// primaries/transfer carry over, matrix becomes Bt709 (RGBA is matrix-free,
+/// Bt709 primaries assumed for the stamp), and 8-bit RGBA is definitionally
+/// Full range. The plan (compile) and the executor (single-conversion check)
+/// must both see THIS declaration — one source of truth, no drift.
+pub fn boundary_rgba_stamp(src: ove_media::ColorTags) -> ove_media::ColorTags {
+    ove_media::ColorTags {
+        primaries: src.primaries,
+        transfer: src.transfer,
+        matrix: ove_media::MatrixCoeffs::Bt709,
+        range: ove_media::Range::Full,
+        chroma_loc: src.chroma_loc,
+    }
+}
+
 /// Alias matching the crate-level name used in the session docs.
 fn yuv_to_rgba(frame: &FrameEnvelope) -> Option<FrameEnvelope> {
     yuv420p_to_rgba(frame)
+}
+
+#[cfg(test)]
+mod boundary_stamp_tests {
+    use super::*;
+
+    fn tags(range: Range, matrix: MatrixCoeffs) -> ColorTags {
+        ColorTags {
+            primaries: Primaries::Bt709,
+            transfer: Transfer::Bt709,
+            matrix,
+            range,
+            chroma_loc: Some(ove_media::ChromaLoc::Left),
+        }
+    }
+
+    fn yuv_frame(color: ColorTags, y: u8, u: u8, v: u8) -> FrameEnvelope {
+        // 2x2 YUV420P: one luma sample, one chroma sample of each plane.
+        FrameEnvelope::video_cpu(
+            Rational::new(0, 1),
+            Rational::new(1, 24),
+            ove_media::StreamId(0),
+            2,
+            2,
+            PixelFormat::Yuv420p,
+            ove_media::BitDepth::B8,
+            color,
+            ove_media::FrameBytes {
+                // 2x2 YUV420P: four luma samples, one U, one V.
+                data: vec![y, y, y, y, u, v],
+                strides: vec![2, 1, 1],
+            },
+            true,
+            BackendId::FFmpegSw,
+            0,
+        )
+    }
+
+    /// REALWORLD-BUG-1 pin: the stamp the boundary conversion emits is the
+    /// EXACT declaration the plan must carry (compile sees the same fn).
+    #[test]
+    fn stamp_matches_converted_envelope() {
+        let src = tags(Range::Limited, MatrixCoeffs::Bt709);
+        let out = yuv420p_to_rgba(&yuv_frame(src, 128, 128, 128)).expect("converts");
+        assert_eq!(out.color, boundary_rgba_stamp(src));
+        assert_eq!(out.color.range, Range::Full);
+        assert_eq!(out.pixel_format, PixelFormat::Rgba);
+    }
+
+    /// REALWORLD-BUG-2 pin: declared-Limited black (y=16) maps to 0.
+    #[test]
+    fn limited_black_maps_to_zero() {
+        let out = yuv420p_to_rgba(&yuv_frame(
+            tags(Range::Limited, MatrixCoeffs::Bt709),
+            16,
+            128,
+            128,
+        ))
+        .expect("converts");
+        assert_eq!(&out.cpu_bytes().unwrap().data[..3], &[0, 0, 0]);
+    }
+
+    /// REALWORLD-BUG-2 pin: declared-Full luma is IDENTITY (no studio swap):
+    /// y=200, neutral chroma -> (200,200,200); the old math crushed it.
+    #[test]
+    fn full_range_luma_is_identity() {
+        let out = yuv420p_to_rgba(&yuv_frame(
+            tags(Range::Full, MatrixCoeffs::Bt709),
+            200,
+            128,
+            128,
+        ))
+        .expect("converts");
+        assert_eq!(&out.cpu_bytes().unwrap().data[..3], &[200, 200, 200]);
+    }
 }
