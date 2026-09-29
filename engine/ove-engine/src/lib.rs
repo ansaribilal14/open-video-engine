@@ -76,6 +76,14 @@ pub enum EngineError {
     AudioRetimeUnsupported {
         speed: Rational,
     },
+    /// A keyframed geometry value rounds outside i32 pixel range at render
+    /// time (ADR-019: the document stores exact rationals; the renderer
+    /// consumes i32 translation). Fail-fast, never saturate.
+    KeyframeValueOutOfRange {
+        clip_id: u64,
+        property: String,
+        value: Rational,
+    },
     Internal(String),
 }
 
@@ -99,6 +107,14 @@ impl std::fmt::Display for EngineError {
             EngineError::AudioRetimeUnsupported { speed } => {
                 write!(f, "audio retime x{speed} unsupported in v1 (named gap)")
             }
+            EngineError::KeyframeValueOutOfRange {
+                clip_id,
+                property,
+                value,
+            } => write!(
+                f,
+                "clip {clip_id} keyframed {property} value {value} leaves i32 pixel range"
+            ),
             EngineError::Internal(d) => write!(f, "internal: {d}"),
         }
     }
@@ -314,11 +330,16 @@ impl Engine {
 
     // -- render path ----------------------------------------------------------
 
-    /// Build the compiler input from the live timeline + probe records.
+    /// Build the compiler input from the live timeline + probe records,
+    /// with keyframe animation EVALUATED at timeline time `t` (WAVE 8,
+    /// ADR-019): each placement's opacity/x/y key tracks are evaluated at
+    /// the clip's LOCAL time (t − start, speed 1 in v1); properties without
+    /// animation fall back to the static defaults (alpha 1, offset 0).
     /// Track order = TrackId ascending (bottom-up layer order).
     pub fn build_render_input(
         &self,
         output: &ove_render::OutputSpec,
+        t: Rational,
     ) -> Result<RenderInput, EngineError> {
         let mut tracks = Vec::new();
         for tid in self.project.timeline().track_ids() {
@@ -328,7 +349,13 @@ impl Engine {
                 .timeline()
                 .track_ref(tid)
                 .map_err(EngineError::Timeline)?;
+            // walk is a void visitor — evaluation errors are captured and
+            // surfaced after the walk (fail-fast on the first bad value).
+            let mut eval_err: Option<EngineError> = None;
             track.walk(&mut |pos, start, clip: &Clip| {
+                if eval_err.is_some() {
+                    return;
+                }
                 // resolve the placement's source by clip id → asset (v1:
                 // every clip maps to the session's FIRST imported source —
                 // the per-clip asset binding rides the log at W6; recorded
@@ -345,12 +372,31 @@ impl Engine {
                     return;
                 };
                 let window = ClipWindow::from_clip(clip, start);
+                // ADR-019 evaluation: exact rational at the frame's local
+                // time, deterministic round-half-up to i32 for geometry.
+                let local = t.sub(start);
+                let props = &clip.properties;
+                let alpha = props.opacity.evaluate(local).unwrap_or(Rational::new(1, 1));
+                let ox = match eval_geometry(&props.x, local, clip.id, "x") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eval_err = Some(e);
+                        return;
+                    }
+                };
+                let oy = match eval_geometry(&props.y, local, clip.id, "y") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eval_err = Some(e);
+                        return;
+                    }
+                };
                 placements.push(Placement {
                     clip_id: clip.id,
                     window,
                     source: source_id_of(hex),
-                    alpha: Rational::new(1, 1),
-                    offset: (0, 0),
+                    alpha,
+                    offset: (ox, oy),
                     src_color: video
                         .video
                         .as_ref()
@@ -359,6 +405,9 @@ impl Engine {
                 });
                 let _ = pos;
             });
+            if let Some(e) = eval_err {
+                return Err(e);
+            }
             tracks.push(TrackInput { placements });
         }
         Ok(RenderInput {
@@ -374,7 +423,7 @@ impl Engine {
         output: &ove_render::OutputSpec,
         t: Rational,
     ) -> Result<FrameEnvelope, EngineError> {
-        let input = self.build_render_input(output)?;
+        let input = self.build_render_input(output, t)?;
         let plan =
             compile_frame(&input, frame_index_of(output, t)).map_err(EngineError::Compile)?;
         // FrameSource: decode-on-demand per placement source
@@ -875,6 +924,30 @@ fn frame_index_of(output: &ove_render::OutputSpec, t: Rational) -> i64 {
     let numer = (t.num() as i128) * (output.rate_num as i128);
     let denom = (t.den() as i128) * (output.rate_den as i128);
     (numer / denom) as i64
+}
+
+/// Evaluate one keyframed geometry property at local time and convert to
+/// the renderer's i32 pixel domain with the deterministic round-half-up
+/// convention (ADR-019; ove-time P13 pins the arithmetic). Unanimated
+/// properties evaluate to None → 0 (the static default). An exact value
+/// rounding outside i32 is a typed error — never a silent saturation.
+fn eval_geometry(
+    track: &ove_timeline::PropertyTrack,
+    local: Rational,
+    clip_id: u64,
+    property: &'static str,
+) -> Result<i32, EngineError> {
+    match track.evaluate(local) {
+        None => Ok(0),
+        Some(v) => {
+            let r = v.round_half_up();
+            i32::try_from(r).map_err(|_| EngineError::KeyframeValueOutOfRange {
+                clip_id,
+                property: property.to_string(),
+                value: v,
+            })
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

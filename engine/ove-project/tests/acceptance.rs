@@ -619,3 +619,113 @@ fn p2_child_entry() {
 // only used transitively.
 #[allow(unused)]
 fn _surface(_p: LogPayload) {}
+
+// ---------------------------------------------------------------------------
+// P-9 — keyframe animation persists exactly (WAVE 8, ADR-019)
+// ---------------------------------------------------------------------------
+
+use ove_timeline::{Interpolation, Keyframe, PropertyName};
+
+fn kf(time_ticks: i64, value_num: i64, value_den: i64, interp: Interpolation) -> Keyframe {
+    Keyframe {
+        time: ticks(time_ticks),
+        value: Rational::new(value_num, value_den),
+        interp,
+    }
+}
+
+#[test]
+fn p9_keyframes_save_reopen_hash_equal_and_split_preserved() {
+    let dir = tmp_dir("p9-keyframes");
+    let mut project = Project::create(&dir, (24_000, 1)).expect("create");
+    setup_track(&mut project);
+    project
+        .execute(
+            Command::Insert {
+                track: 1,
+                index: 0,
+                clip: Clip::new(1, ticks(96), ticks(0)),
+            },
+            OWNER,
+        )
+        .expect("insert");
+    // animate opacity (fade) and x (motion)
+    project
+        .execute(
+            Command::SetKeyframes {
+                track: 1,
+                id: 1,
+                property: PropertyName::Opacity,
+                keys: vec![
+                    kf(0, 1, 1, Interpolation::Linear),
+                    kf(96, 0, 1, Interpolation::Linear),
+                ],
+            },
+            OWNER,
+        )
+        .expect("set opacity keys");
+    project
+        .execute(
+            Command::SetKeyframes {
+                track: 1,
+                id: 1,
+                property: PropertyName::X,
+                keys: vec![
+                    kf(0, 0, 1, Interpolation::Linear),
+                    kf(48, 100, 1, Interpolation::Linear),
+                ],
+            },
+            OWNER,
+        )
+        .expect("set x keys");
+    let hash_before = project.state_hash();
+
+    // reopen from disk: the log replays SetKeyframes → identical hash
+    drop(project);
+    let mut reopened = Project::open(&dir).expect("reopen");
+    assert_eq!(
+        reopened.state_hash(),
+        hash_before,
+        "reopen must reproduce the animated state exactly"
+    );
+
+    // split mid-animation on the LIVE session; evaluation must be exact
+    // across the seam
+    let new_id = reopened.timeline_mut().alloc_id();
+    reopened
+        .execute(
+            Command::Split {
+                track: 1,
+                id: 1,
+                at: ticks(30),
+                new_id,
+            },
+            OWNER,
+        )
+        .expect("split");
+    let hash_split = reopened.state_hash();
+
+    // save + reopen the SPLIT state — replay of the split inverse batch
+    // (which embeds SetKeyframes restores) must land on the same hash
+    drop(reopened);
+    let reopened2 = Project::open(&dir).expect("reopen after split");
+    assert_eq!(
+        reopened2.state_hash(),
+        hash_split,
+        "post-split animated state must survive reopen"
+    );
+
+    // undo across reopen is NOT available (undo stack is session state,
+    // ADR-008) — but the document's animation data is complete: evaluate
+    // the seam continuity from the reopened timeline.
+    let tl = reopened2.timeline();
+    let track = tl.track_ref(1).expect("track");
+    let left = track.clip_at(0).expect("left clip");
+    let right = track.clip_at(1).expect("right clip");
+    let v_left_at_29 = left.properties.opacity.evaluate(ticks(29));
+    let v_right_at_0 = right.properties.opacity.evaluate(ticks(0));
+    let v_left_at_30 = left.properties.opacity.evaluate(ticks(30));
+    assert_eq!(v_right_at_0, v_left_at_30, "boundary value continuity");
+    // exact lerp continuity against the unsplit fade: v(29) = 1 − 29/96·(1/2)
+    assert_eq!(v_left_at_29, Some(Rational::new(67, 96)));
+}

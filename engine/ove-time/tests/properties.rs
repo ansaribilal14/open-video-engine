@@ -343,3 +343,93 @@ fn p12_exact_boundary_that_must_not_panic() {
     let r2 = Rational::new(i64::MAX, 7).mul(Rational::new(7, 1));
     assert_eq!(r2, Rational::new(i64::MAX, 1));
 }
+
+// ---------------------------------------------------------------------------
+// P13 — round_half_up: the exact→integer conversion for keyframed geometry
+// (ADR-019). Halves round toward +∞: floor(x + 1/2) in exact arithmetic.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn p13_round_half_up_exact_values() {
+    // integers pass through exactly
+    assert_eq!(Rational::new(7, 1).round_half_up(), 7);
+    assert_eq!(Rational::new(-7, 1).round_half_up(), -7);
+    assert_eq!(Rational::new(0, 24000).round_half_up(), 0);
+    // exact halves round UP (toward +∞) — the convention the renderer pins
+    assert_eq!(Rational::new(1, 2).round_half_up(), 1);
+    assert_eq!(Rational::new(3, 2).round_half_up(), 2);
+    assert_eq!(Rational::new(-1, 2).round_half_up(), 0); // floor(-1/2 + 1/2) = 0
+    assert_eq!(Rational::new(-3, 2).round_half_up(), -1); // floor(-3/2 + 1/2) = -1
+                                                          // below-half rounds down, at/above-half rounds up
+    assert_eq!(Rational::new(11, 10).round_half_up(), 1); // 1.1 → 1
+    assert_eq!(Rational::new(15, 10).round_half_up(), 2); // 1.5 → 2
+    assert_eq!(Rational::new(16, 10).round_half_up(), 2); // 1.6 → 2
+                                                          // negative non-halves: floor(x + 1/2)
+    assert_eq!(Rational::new(-11, 10).round_half_up(), -1); // -1.1 → -1
+    assert_eq!(Rational::new(-16, 10).round_half_up(), -2); // -1.6 → -2
+    assert_eq!(Rational::new(-9, 10).round_half_up(), -1); // -0.9 → -1
+    assert_eq!(Rational::new(-4, 10).round_half_up(), 0); // -0.4 → 0
+                                                          // tick-grid case: 1/3 of a tick den
+    assert_eq!(Rational::new(1, 3).round_half_up(), 0);
+    assert_eq!(Rational::new(2, 3).round_half_up(), 1);
+    assert_eq!(Rational::new(-1, 3).round_half_up(), 0);
+    assert_eq!(Rational::new(-2, 3).round_half_up(), -1);
+    // den 1 with i64::MIN: exact integer, representable
+    assert_eq!(Rational::new(i64::MIN, 1).round_half_up(), i64::MIN);
+    assert_eq!(Rational::new(i64::MAX, 1).round_half_up(), i64::MAX);
+}
+
+#[test]
+fn p13_round_half_up_is_total_over_representable_rationals() {
+    // PROOF (pinned, ADR-019): round_half_up CANNOT overflow for any
+    // representable Rational. den = 1 → the value is the integer num itself
+    // (rounds to itself, always representable). den >= 2 → |value| <=
+    // MAX/2, so floor(value + 1/2) <= MAX/2 + 1/2 < MAX and symmetrically
+    // > MIN. The overflow panic arm is unreachable by construction — this
+    // test pins the extremes where a wrap-based implementation would break.
+    assert_eq!(Rational::new(i64::MAX, 1).round_half_up(), i64::MAX);
+    assert_eq!(Rational::new(i64::MIN, 1).round_half_up(), i64::MIN);
+    // den >= 2 extremes: MAX - 1/2 is NOT representable ((2*MAX-1)/2
+    // overflows), so the closest den-2 extreme is (MAX-1)/2 — far from the
+    // boundary. Cross-check the formula against an independent i128
+    // floor(x + 1/2) over a sweep of magnitudes.
+    let cases = [
+        (i64::MAX, 2),
+        (i64::MAX - 1, 2),
+        (i64::MIN + 2, 2),
+        (i64::MIN + 1, 3),
+        (i64::MAX, 7),
+        (i64::MIN, 7),
+        (4611686018427387904, 3), // 2^62/3
+        (-4611686018427387905, 3),
+    ];
+    for (n, d) in cases {
+        let r = Rational::new(n, d);
+        // independent reference: floor((2n + d) / (2d)) in i128
+        let nn = 2 * n as i128 + d as i128;
+        let dd = 2 * d as i128;
+        let expect = nn.div_euclid(dd) as i64;
+        assert_eq!(r.round_half_up(), expect, "n={n} d={d}");
+    }
+}
+
+#[test]
+fn p13_round_half_up_matches_identity_near_half() {
+    // exact identity: for any x with den >= 2, round_half_up(x) must equal
+    // floor(x + 1/2) computed WITHOUT the round_half_up code path (i128).
+    // These are the half-boundary cases an fp implementation gets wrong.
+    for n in [-1007i64, -5, -3, -1, 1, 3, 5, 1007] {
+        for d in [2i64, 4, 8, 24000] {
+            let r = Rational::new(n, d);
+            let up = Rational::new(1, 2);
+            let shifted = r.add(up); // exact: representable for these magnitudes
+            let expect_floor = {
+                let nn = shifted.num() as i128;
+                let dd = shifted.den() as i128;
+                let q = nn.div_euclid(dd);
+                i64::try_from(q).unwrap()
+            };
+            assert_eq!(r.round_half_up(), expect_floor, "n={n} d={d}");
+        }
+    }
+}

@@ -33,6 +33,12 @@ pub struct Pass {
    algorithms, no hidden z-order.
 3. Every parameter that depends on time is an exact rational evaluated at the frame's
    timeline pts (keyframes in wave 7 follow the same rule).
+   **Implemented (2026-09-29, ADR-019)**: keyframes live on the clip
+   (`ove_timeline::property`); the ENGINE evaluates opacity/x/y at the
+   frame's local time and bakes exact rationals into the placement
+   (geometry via the P13 round-half-up i32 conversion) — the plan still
+   sees only exact per-frame values, so this rule now holds WITH
+   animation, pinned by the W8 engine integration test.
 4. Plan is backend-agnostic; backends choose implementation per pass kind — they may not
    reorder, skip, or merge passes without producing a byte-identical output (golden
    frames arbitrate).

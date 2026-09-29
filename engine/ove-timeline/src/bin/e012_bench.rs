@@ -81,6 +81,7 @@ fn apply_cop(c: &mut dyn TrackOps, op: &COp) {
                     id: cl.id,
                     duration: cl.duration.sub(at_r),
                     source_in: cl.source_in.add(at_r),
+                    properties: Default::default(),
                 },
             )
             .unwrap();
@@ -103,6 +104,7 @@ fn apply_cop(c: &mut dyn TrackOps, op: &COp) {
                     id: *id,
                     duration: ticks(*tk),
                     source_in: Rational::new(0, TICK_DEN),
+                    properties: Default::default(),
                 },
             )
             .unwrap();
@@ -142,6 +144,7 @@ fn build_timeline(kind: fn() -> TrackKind, n_clips: usize, durs: &[i64]) -> (Tim
                 id,
                 duration: ticks(d),
                 source_in: Rational::new(0, TICK_DEN),
+                properties: Default::default(),
             },
         })
         .unwrap();
@@ -171,6 +174,7 @@ fn main() {
                     id: i as u64 + 1,
                     duration: ticks(d),
                     source_in: Rational::new(0, TICK_DEN),
+                    properties: Default::default(),
                 })
                 .collect(),
         );
@@ -206,6 +210,7 @@ fn main() {
                     id: i as u64 + 1,
                     duration: ticks(d),
                     source_in: Rational::new(0, TICK_DEN),
+                    properties: Default::default(),
                 })
                 .collect(),
         );
@@ -274,6 +279,7 @@ fn main() {
                     id: i as u64 + 1,
                     duration: ticks(d),
                     source_in: Rational::new(0, TICK_DEN),
+                    properties: Default::default(),
                 })
                 .collect(),
         );
@@ -427,6 +433,7 @@ fn main() {
                             id,
                             duration: ticks(d),
                             source_in: Rational::new(0, TICK_DEN),
+                            properties: Default::default(),
                         },
                     })
                     .unwrap();
@@ -517,6 +524,7 @@ fn run_container(w: &str, durs: &[i64], ops: &[COp]) {
                     id: i as u64 + 1,
                     duration: ticks(d),
                     source_in: Rational::new(0, TICK_DEN),
+                    properties: Default::default(),
                 },
             )
             .unwrap();
@@ -617,6 +625,7 @@ fn run_command_leg(ctor: fn() -> TrackKind, durs: &[i64], ops: &[KOp]) -> (u64, 
                 id,
                 duration: ticks(d),
                 source_in: Rational::new(0, TICK_DEN),
+                properties: Default::default(),
             },
         })
         .unwrap();

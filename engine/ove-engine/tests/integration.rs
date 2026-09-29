@@ -272,6 +272,143 @@ fn w6_copy_fixture(name: &str) -> PathBuf {
     media(name)
 }
 
+// ---------------------------------------------------------------------------
+// WAVE 8: keyframe animation — exact evaluation into the render path
+// (ADR-019): opacity/x keys evaluated at the frame's local time, carried
+// into the compiled plan, hash-stable, reopen-stable, render-deterministic.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn w8_keyframes_exact_eval_and_stability() {
+    let dir = tmp("w8-keyframes");
+    let mut e = Engine::create(&dir, (24_000, 1)).expect("create");
+    e.add_track(1, ove_timeline::TrackKind::Gap(GapTrack::new()))
+        .expect("track");
+    let hex = e.import_media(&media("copy24.mp4")).expect("import");
+    // clip: 2 s at timeline 0 (48_000 ticks @ 24 kHz); 24 fps → 48 frames
+    e.add_clip(1, &hex, ticks(48_000), ticks(0)).expect("clip");
+
+    let out = output_spec(64, 64);
+
+    // animate: opacity 1 → 0 linear over the clip; x 0 → 100 linear
+    e.execute(ove_timeline::Command::SetKeyframes {
+        track: 1,
+        id: 1,
+        property: ove_timeline::PropertyName::Opacity,
+        keys: vec![
+            ove_timeline::Keyframe::new(
+                ticks(0),
+                Rational::new(1, 1),
+                ove_timeline::Interpolation::Linear,
+            ),
+            ove_timeline::Keyframe::new(
+                ticks(48_000),
+                Rational::new(0, 1),
+                ove_timeline::Interpolation::Linear,
+            ),
+        ],
+    })
+    .expect("opacity keys");
+    e.execute(ove_timeline::Command::SetKeyframes {
+        track: 1,
+        id: 1,
+        property: ove_timeline::PropertyName::X,
+        keys: vec![
+            ove_timeline::Keyframe::new(
+                ticks(0),
+                Rational::new(0, 1),
+                ove_timeline::Interpolation::Linear,
+            ),
+            ove_timeline::Keyframe::new(
+                ticks(48_000),
+                Rational::new(100, 1),
+                ove_timeline::Interpolation::Linear,
+            ),
+        ],
+    })
+    .expect("x keys");
+    let animated_hash = e.state_hash();
+
+    // exact evaluation at frame pts: frame k covers t = k/24 s (frame 24
+    // == 1 s == 24_000 ticks). local == t (clip starts at 0).
+    let input = e
+        .build_render_input(&out, Rational::new(1, 1))
+        .expect("input at 1s");
+    let p = &input.tracks[0].placements[0];
+    assert_eq!(p.alpha, Rational::new(1, 2), "alpha at 1 s is exactly 1/2");
+    assert_eq!(p.offset, (50, 0), "x at 1 s is exactly 50");
+    // the compiled plan carries the evaluated values verbatim
+    let plan = ove_render::compile_frame(&input, 24).expect("plan");
+    let alpha_pass = plan
+        .passes
+        .iter()
+        .find(|pass| matches!(pass.kind, ove_render::PassKind::BlendOver { .. }))
+        .expect("blend pass");
+    match alpha_pass.kind {
+        ove_render::PassKind::BlendOver { alpha } => assert_eq!(alpha, Rational::new(1, 2)),
+        _ => unreachable!(),
+    }
+    let tx_pass = plan
+        .passes
+        .iter()
+        .find(|pass| matches!(pass.kind, ove_render::PassKind::Transform { .. }))
+        .expect("transform pass");
+    match tx_pass.kind {
+        ove_render::PassKind::Transform { dx, dy } => {
+            assert_eq!((dx, dy), (50, 0));
+        }
+        _ => unreachable!(),
+    }
+
+    // a half-second frame (local 12_000 ticks): alpha 3/4, x 25
+    let input_q = e
+        .build_render_input(&out, Rational::new(1, 2))
+        .expect("input at 0.5s");
+    let pq = &input_q.tracks[0].placements[0];
+    assert_eq!(pq.alpha, Rational::new(3, 4));
+    assert_eq!(pq.offset, (25, 0));
+
+    // undo/redo roundtrip is hash-exact (two sets = two undo steps)
+    e.undo().expect("undo x");
+    e.undo().expect("undo opacity");
+    let static_hash = e.state_hash();
+    {
+        let input_s = e
+            .build_render_input(&out, Rational::new(1, 2))
+            .expect("static input");
+        let ps = &input_s.tracks[0].placements[0];
+        assert_eq!(ps.alpha, Rational::new(1, 1), "static fallback after undo");
+        assert_eq!(ps.offset, (0, 0));
+    }
+    e.redo().expect("redo opacity");
+    e.redo().expect("redo x");
+    assert_eq!(
+        e.state_hash(),
+        animated_hash,
+        "redo restores the animated state"
+    );
+
+    // reopen: the animated state survives persistence
+    drop(e);
+    let mut r = Engine::open(&dir).expect("reopen");
+    assert_eq!(
+        r.state_hash(),
+        animated_hash,
+        "animated state survives reopen"
+    );
+
+    // render determinism WITH animation: same frame twice → byte-identical
+    let f1 = r.render_frame(&out, Rational::new(1, 1)).expect("render 1");
+    let f2 = r.render_frame(&out, Rational::new(1, 1)).expect("render 2");
+    assert_eq!(
+        f1.cpu_bytes().expect("payload").data,
+        f2.cpu_bytes().expect("payload").data,
+        "animated render must be deterministic"
+    );
+    assert_eq!(f1.pts, f2.pts);
+    let _ = static_hash;
+}
+
 #[test]
 fn w6_vertical_slice_milestone() {
     let dir = tmp("w6-milestone");
