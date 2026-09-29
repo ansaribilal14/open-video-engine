@@ -1,0 +1,13 @@
+[package]
+name = "ove-script"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["open-video-engine contributors"]
+description = "Scripting client for the open-video-engine (wave 16): Rhai (pure Rust, NO floats by feature) driving the same engine semantics as the CLI/batch/MCP shells — scripts are clients, edit semantics live ONLY in the engine core"
+
+[dependencies]
+ove-engine = { path = "../ove-engine" }
+ove-timeline = { path = "../ove-timeline" }
+ove-time = { path = "../ove-time" }
+rhai = { version = "1.19", features = ["no_float"] }
