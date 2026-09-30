@@ -415,12 +415,11 @@ fn realworld_reference_media_proof() {
     assert_eq!(r.state_hash(), live_hash, "reopen hash == live hash");
     assert_eq!(
         r.project().clip_assets().len(),
-        5,
-        "clip bindings survive reopen (clip1, clip2, clip4, filler, overlay). \
-         NOTE: the Split command's right half (clip2b) has no binding entry — \
-         record_entry_bindings does not consume Split (RW-NOTE-1; inert under \
-         the v1 single-source render, must be closed before multi-source \
-         render-by-binding lands)"
+        6,
+        "clip bindings survive reopen (clip1, clip2, clip2b, clip4, filler, \
+         overlay). RLW-7: RW-NOTE-1 CLOSED — record_entry_bindings consumes \
+         Split, so the right half (clip2b) carries the SAME asset binding as \
+         clip2 (6/6 clips bound; was 5/6 pre-RLW-7)"
     );
     let t_mid_re = r
         .render_frame(&output, s(5, 2))
