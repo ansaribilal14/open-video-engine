@@ -14,6 +14,10 @@ path = "src/lib.rs"
 name = "ove-plugin-stub"
 path = "src/bin/stub.rs"
 
+[[bin]]
+name = "ove-plugin-flood"
+path = "src/bin/flood.rs"
+
 [dependencies]
 ove-engine = { path = "../ove-engine" }
 ove-media = { path = "../ove-media" }

@@ -64,6 +64,19 @@ pub const PROTOCOL_VERSION: u32 = 1;
 /// proposals from a manifest that did not declare it are rejected in-band.
 pub const CAP_TIMELINE: &str = "propose.timeline";
 
+/// ADR-022 (wave 18): a plugin is an UNTRUSTED peer. The session line
+/// cap bounds the memory a hostile plugin can force the host to buffer
+/// per stdout line (enforced at READ time in [`PluginHost::read_line`]
+/// and again at the state machine — defense in depth). 1 MiB is ~1000×
+/// any legitimate protocol line.
+pub const PLUGIN_LINE_MAX_BYTES: usize = 1024 * 1024;
+
+/// ADR-022: the proposal budget bounds the receipt memory and the
+/// mutation-flood rate of a hostile session. Receipts are kept for
+/// evidence (ADR-021 §10); 10 000 proposals is far past any legitimate
+/// scripted edit run.
+pub const PLUGIN_MAX_PROPOSALS: usize = 10_000;
+
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
@@ -460,6 +473,14 @@ impl PluginSession {
     /// violations return [`PluginError::Protocol`] (abort); payload
     /// problems reject the proposal in-band and the session continues.
     pub fn ingest(&mut self, line: &str, e: &mut Engine) -> Result<Step, PluginError> {
+        // ADR-022: hostile-line bound at the state machine too (the wire
+        // reader enforces the same cap — defense in depth).
+        if line.len() > PLUGIN_LINE_MAX_BYTES {
+            return Err(PluginError::Protocol(format!(
+                "line too large: {} > {PLUGIN_LINE_MAX_BYTES} bytes",
+                line.len()
+            )));
+        }
         let v: serde_json::Value = serde_json::from_str(line)
             .map_err(|er| PluginError::Protocol(format!("non-JSON line: {er}")))?;
         let ty = v
@@ -522,6 +543,13 @@ impl PluginSession {
                     return Err(PluginError::Protocol(
                         "proposal before manifest (or after done)".to_string(),
                     ));
+                }
+                // ADR-022: proposal budget — a hostile session must abort
+                // typed instead of accumulating receipts unboundedly.
+                if self.receipts.len() >= PLUGIN_MAX_PROPOSALS {
+                    return Err(PluginError::Protocol(format!(
+                        "proposal budget exhausted: more than {PLUGIN_MAX_PROPOSALS} proposals in one session"
+                    )));
                 }
                 let id = v.get("proposal").and_then(|p| p.as_u64()).ok_or_else(|| {
                     PluginError::Protocol("proposal: missing numeric \"proposal\" id".to_string())
@@ -663,8 +691,18 @@ pub struct PluginHost {
 }
 
 impl PluginHost {
+    /// Launch rules (ADR-022): the plugin process is exec'd DIRECTLY —
+    /// arguments are passed verbatim to the executable, never through a
+    /// shell, so no plugin name or argument can ever gain shell
+    /// semantics. `spawn` is the no-argument form.
     pub fn spawn(exe: &Path) -> Result<Self, PluginError> {
+        Self::spawn_with_args(exe, &[])
+    }
+
+    /// Direct-exec launch with verbatim arguments (no shell anywhere).
+    pub fn spawn_with_args(exe: &Path, args: &[&str]) -> Result<Self, PluginError> {
         let mut child = Proc::new(exe)
+            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -679,16 +717,26 @@ impl PluginHost {
     }
 
     fn read_line(&mut self) -> Result<Option<String>, PluginError> {
-        let mut buf = String::new();
+        // ADR-022: bounded read — the host never buffers a hostile line
+        // past the cap; the abort happens BEFORE the full line is read.
+        use std::io::Read;
+        let mut buf = Vec::new();
         let n = self
             .stdout
-            .read_line(&mut buf)
+            .by_ref()
+            .take((PLUGIN_LINE_MAX_BYTES + 2) as u64)
+            .read_until(b'\n', &mut buf)
             .map_err(|er| PluginError::Protocol(format!("read from plugin: {er}")))?;
         if n == 0 {
-            Ok(None)
-        } else {
-            Ok(Some(buf.trim_end_matches(['\n', '\r']).to_string()))
+            return Ok(None);
         }
+        if n > PLUGIN_LINE_MAX_BYTES + 1 {
+            return Err(PluginError::Protocol(format!(
+                "line too large: {n} > {PLUGIN_LINE_MAX_BYTES} bytes — aborted at read time"
+            )));
+        }
+        let s = String::from_utf8_lossy(&buf).to_string();
+        Ok(Some(s.trim_end_matches(['\n', '\r']).to_string()))
     }
 
     fn write_line(&mut self, line: &str) -> Result<(), PluginError> {

@@ -27,6 +27,28 @@ pub const PROTOCOL_VERSION: &str = "2024-11-05";
 pub const SERVER_NAME: &str = "ove-mcp";
 pub const SERVER_VERSION: &str = "0.1.0";
 
+/// ADR-022 (wave 18): an MCP client (or a compromised transport) can push
+/// arbitrarily large stdin lines. The stdio server bounds each line at
+/// READ time and answers oversize lines with a TYPED JSON-RPC error, then
+/// keeps serving — never buffering unbounded input, never dying.
+pub const LINE_MAX_BYTES: usize = 1024 * 1024;
+
+/// The typed JSON-RPC error for an oversized stdin line (id: null — the
+/// oversized line could not be parsed to extract a request id).
+pub fn oversized_line_response(len: usize) -> String {
+    json!({
+        "jsonrpc": "2.0",
+        "id": Value::Null,
+        "error": {
+            "code": -32000,
+            "message": format!(
+                "line too large: {len} bytes exceeds the {LINE_MAX_BYTES}-byte stdio line cap"
+            )
+        }
+    })
+    .to_string()
+}
+
 /// The tool catalogue (name, description, JSON-schema input).
 pub fn tool_catalogue() -> Vec<Value> {
     let rat = || {

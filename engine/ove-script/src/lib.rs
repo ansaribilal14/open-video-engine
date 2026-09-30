@@ -20,6 +20,28 @@ use ove_engine::Engine;
 use ove_time::Rational;
 use ove_timeline::{GapTrack, TrackKind};
 
+// ---------------------------------------------------------------------------
+// ADR-022 (wave 18): a script is UNTRUSTED input. Rhai's default engine
+// leaves string/array/map sizes effectively unbounded — a memory-bomb
+// script can drive the host into allocator OOM (proven by the W18
+// conformance test: the pre-fix engine was SIGKILLed by the OOM killer).
+// The engine therefore runs with DECLARED resource budgets; exceeding
+// one fails the run as a typed script error.
+// ---------------------------------------------------------------------------
+
+/// Max string value size (bytes) any script operation may materialize.
+pub const SCRIPT_STRING_MAX_BYTES: usize = 16 * 1024 * 1024;
+/// Max array length.
+pub const SCRIPT_ARRAY_MAX: usize = 1_000_000;
+/// Max object-map entries.
+pub const SCRIPT_MAP_MAX: usize = 65_536;
+/// Max function-call nesting depth.
+pub const SCRIPT_CALL_LEVELS: usize = 128;
+/// Max script operations per run (CPU bound).
+pub const SCRIPT_MAX_OPERATIONS: u64 = 1_000_000;
+/// Max total `emit` output per run (host memory for the collected output).
+pub const SCRIPT_EMIT_MAX_BYTES: usize = 1024 * 1024;
+
 /// Errors surfacing from a script run (stringly at the Rhai boundary —
 /// the Rhai error type owns the context; we add no information loss).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +80,7 @@ struct Inner {
     engine: Option<Engine>,
     dir: std::path::PathBuf,
     out: Vec<String>,
+    out_bytes: usize,
 }
 
 impl Session {
@@ -68,6 +91,7 @@ impl Session {
                 engine: None,
                 dir: dir.to_path_buf(),
                 out: Vec::new(),
+                out_bytes: 0,
             })),
         }
     }
@@ -106,9 +130,20 @@ impl Session {
                 }
             },
         );
-        rh.register_fn("emit", |s: &mut Session, line: String| {
-            s.inner.borrow_mut().out.push(line);
-        });
+        rh.register_fn(
+            "emit",
+            |s: &mut Session, line: String| -> Result<(), Box<EvalAltResult>> {
+                let mut inner = s.inner.borrow_mut();
+                if inner.out_bytes + line.len() > SCRIPT_EMIT_MAX_BYTES {
+                    return Err(rerr(format!(
+                        "emit budget exceeded: script output exceeds {SCRIPT_EMIT_MAX_BYTES} bytes per run"
+                    )));
+                }
+                inner.out_bytes += line.len();
+                inner.out.push(line);
+                Ok(())
+            },
+        );
         rh.register_fn(
             "create_project",
             |s: &mut Session, num: i64, den: i64| -> Result<String, Box<EvalAltResult>> {
@@ -225,9 +260,15 @@ impl Session {
 
 /// Run `source` against the project at `dir` with the standard API exposed
 /// as the `ove` variable. Same script + same project state → same output.
+/// Runs under the ADR-022 resource budgets (see the constants above).
 pub fn run_script(dir: &std::path::Path, source: &str) -> Result<String, ScriptError> {
     let session = Session::new(dir);
     let mut rh = RhaiEngine::new();
+    rh.set_max_operations(SCRIPT_MAX_OPERATIONS);
+    rh.set_max_call_levels(SCRIPT_CALL_LEVELS);
+    rh.set_max_string_size(SCRIPT_STRING_MAX_BYTES);
+    rh.set_max_array_size(SCRIPT_ARRAY_MAX);
+    rh.set_max_map_size(SCRIPT_MAP_MAX);
     session.clone().register(&mut rh);
     let mut scope = rhai::Scope::new();
     scope.push("ove", session.clone());
