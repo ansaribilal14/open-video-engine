@@ -910,6 +910,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ove-plugin"
+version = "0.1.0"
+dependencies = [
+ "ove-engine",
+ "ove-media",
+ "ove-render",
+ "ove-time",
+ "ove-timeline",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ove-project"
 version = "0.1.0"
 dependencies = [

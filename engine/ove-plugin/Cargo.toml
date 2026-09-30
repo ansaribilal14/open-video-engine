@@ -1,0 +1,24 @@
+[package]
+name = "ove-plugin"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["open-video-engine contributors"]
+description = "Process-tier plugin client for the open-video-engine (wave 17, ADR-021): plugins propose commands through the SAME typed command grammar — the plugin boundary adds zero new engine semantics"
+
+[lib]
+name = "ove_plugin"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ove-plugin-stub"
+path = "src/bin/stub.rs"
+
+[dependencies]
+ove-engine = { path = "../ove-engine" }
+ove-media = { path = "../ove-media" }
+ove-time = { path = "../ove-time" }
+ove-timeline = { path = "../ove-timeline" }
+ove-render = { path = "../ove-render" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
