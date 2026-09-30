@@ -6,7 +6,7 @@
 
 WAVE: 18 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security — all landed; RLW-1/2/3 = real-world certification trail)
 DATE: 2026-09-30
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = this PR
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078)
 
 ## WAVE 18 deltas (2026-09-30) — security hardening (untrusted-input budgets, ADR-022)
 
@@ -658,8 +658,8 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 - Workflow: fmt + clippy + tests (bundled) + portability guard + cargo-audit
   + libav-confinement. Cache prefix `v2-portable-ffmpeg` (poisoned caches
   unreachable).
-- Latest confirmation: post-merge run 36502138331 on HEAD `00a46b9`
-  SUCCESS (2026-09-29). All recent runs SUCCESS.
+- Latest confirmation: PR #18 checks 5/5 SUCCESS AND post-merge main run
+  SUCCESS on HEAD `a8bc078` (2026-09-30). All recent runs SUCCESS.
 
 ## Current blockers
 
