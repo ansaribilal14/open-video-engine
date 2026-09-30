@@ -198,6 +198,30 @@ datacenter bot-wall.
 | release hygiene | 12 fully-merged stale branches deleted (wave-7/8/9/10-12/13-14/15/16/17/18/19, realworld-validation, fix/ci-bundled-ffmpeg-sigill); repo is `main`-only |
 | documentation integrity | ADR-023 file committed (was referenced by the state doc, never written); README refreshed to the honest waves-0–19 / 13-crate posture; the §9 baseline generator now exists and is executable |
 
+### Wave-RLW-6 (W21 production audit) results (2026-09-30)
+
+Scope: identical scope-of-proof wording as above — a verified EDITED
+SEGMENT (160 frames = 6.673333 s), never a full-source pass-through.
+W21 is the production-audit wave: NO engine code changed (gate tree
+`22a505a` = the audit commit; the docs commit lands after the gate).
+This leg certifies that the AUDITED state — the tree the production
+classifications and ADR-024 cite — still carries the full real-media
+certification. The source was re-provisioned after the THIRD environment
+wipe; the identity gate caught a new acquisition pitfall on the way.
+
+| Check | Result |
+|---|---|
+| source re-provision + sha256 identity gate `2d315daf…705f` | PASS — but only after the gate REJECTED a non-identical variant: ytagent's new `cobalt_community` method (Tier-1 success, `d7e3019a…`, 122.92 s re-mux) failed the sha256 check; the certified bytes came from a fresh ytagent-farm run (DASH f136+f140, local stream-copy merge) — the same provenance chain as RLW-1..5 |
+| acquisition recipe hardened from THREE findings | PASS — (a) `acquire_source.sh` now resolves the tier-1 file via `ytagent_result.json` `final_path` (the old `video_*` glob missed ytagent's naming) and gates every tier result against `EXPECTED_SHA256` (defaults to the §2 identity), escalating tiers on mismatch instead of accepting a byte-wrong "success"; (b) normalization REFUSES incomplete DASH parts (video without audio) with a loud typed-style error instead of silently remuxing a video-only source; (c) UPSTREAM DEFECT found and worked around: ytagent's `_download_artifact` extracts only the FIRST media file in the artifact zip and breaks — DASH artifacts (f136.mp4 + f140.m4a) come back video-only even though the artifact itself is complete (verified by zip listing). `acquire_source.sh` now completes the fetch-back by extracting ALL media parts from the same run's artifact (the YouTube download itself stays in the farm/ytagent mechanism — OVE grows no downloader). Full chain re-proven end-to-end: tier-1 rejection → farm escalation → incomplete-part refusal → artifact completion → identity gate PASS |
+| independent baseline REGENERATED from scratch | PASS — `baseline_analysis.sh` + `baseline_facts.py` reproduced §3 exactly: 2945 frames, 5,419,008 samples (full independent PCM decode), 48 keyframes, decode CLEAN under `-xerror` |
+| permanent proof re-run on the SAME source (commit-bound `OVE_COMMIT=22a505a`) | PASS — 22.29 s; export sha256 `baf23d2a…` IDENTICAL to the RLW-1/2/3/4/5 certified output; reopen re-export IDENTICAL; WAV 294,294 samples exact |
+| ADR-023 session budget on real media | PASS — decoder opens per 160-frame export = 1 (and 1 for the reopen re-export) |
+| W17 plugin gate re-run (existing certification) | PASS — 2.17 s, split applied through the command bus, receipt recorded, export sha256 `ff5e67f8…` IDENTICAL to the W18-certified value |
+| W18 security gate re-run (existing certification) | PASS — 2.41 s; hostile 11k-proposal flood → typed budget abort (`proposal budget exhausted: more than 10000…`), state hash unchanged by the attack, legit plugin still applied its edit, export sha256 `ff5e67f8…` IDENTICAL |
+| independent output verification | PASS — 15/15 boolean checks true, zero false: ffprobe 160 frames @ 24000/1001, container 6.673333 s, clean `-xerror` decode, AAC 6.672993 s, WAV 294,294, launch-site pixel identity (begin mean_abs_diff 0.0), seam/clip4/end frames consistent with the certified composites |
+| visual sanity (9 frames at 0/0.5/1/2/2.7/3/4/5/6.6 s) | PASS — real Artemis I launch footage: night-crowd establishing shot ("NOVEMBER 16, 2022" title), keyframed overlay composite, pad close-up with ignition steam ("929" burn timer); exact geometry, no corruption/frozen/black frames |
+| audited-tree integrity | PASS — the audit's evidence tree is the gate tree: workspace 189/189 GREEN, fmt/clippy clean, zero engine diffs between `22a505a` and the W20 gate tree (`f2dd181` + README/audit/ADR docs) |
+
 ## 6. Real defects found by real media (the point of this workflow)
 
 | ID | Defect | Fix | Pin |

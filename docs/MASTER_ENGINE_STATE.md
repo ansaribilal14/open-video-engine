@@ -4,9 +4,20 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 20 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release — all landed; RLW-1/2/3/4/5 = real-world certification trail)
+WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1/2/3/4/5/6 = real-world certification trail)
 DATE: 2026-09-30
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20; W21 = PR #21
+
+POST-W21 POSTURE (binding, per the W21 audit §3 decision 3): the wave plan
+(0–21) is COMPLETE. The repository continues under the CERTIFICATION LOOP
+only — any future engineering wave re-runs the real-media gate (RLW-7+) and
+updates this file. The named residuals are the roadmap, not forgotten:
+platform runtime legs (D7 PARTIAL), real-GPU (D8 EXPERIMENTAL), release
+pipeline tooling (D10 PARTIAL), hostile REALWORLD/ corpus, RW-NOTE-1
+clip_assets binding, log-flood CPU budget, CI bundled-FFmpeg SIGILL. Next
+concrete engineering wave when one is commissioned: close RW-NOTE-1 or the
+hostile-corpus leg (REALWORLD_VALIDATION §10) — both have committed reopen
+conditions.
 
 ## WAVE 20 deltas (2026-09-30) — docs/release (documentation integrity, release hygiene, RLW-5)
 
@@ -59,6 +70,73 @@ COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10;
    no tag/CHANGELOG/release pipeline (W21 decision), no CI SIGILL
    change (tracked), no clip_assets binding change (RW-NOTE-1 tracked
    until the multi-source/binding model lands).
+
+## WAVE 21 deltas (2026-09-30) — production audit (PRODUCTION_READINESS_AUDIT, ADR-024, RLW-6)
+
+1. **The production-readiness audit exists and is honest**:
+   `research/audit/PRODUCTION_READINESS_AUDIT.md` classifies 12
+   production dimensions using the charter's eight allowed labels, each
+   citing committed evidence. The verdict stays in charter language: the
+   headless core (D1/D2/D3/D4/D5/D11/D12) is TESTED end to end,
+   real-media-certified six waves in a row; **the engine as a whole is
+   NOT declared production-ready** — D7 PARTIAL (real-device platform
+   legs), D8 EXPERIMENTAL (real GPU), D10 PARTIAL (release tooling),
+   each with named reopen conditions. No label was upgraded by prose.
+2. **ADR-024 — codec-artifact distribution decided** (the README
+   decision W20 explicitly gated on this audit): the libav-free core
+   ships MIT OR Apache-2.0 without qualification; libav-linked adapter
+   builds are LGPL-2.1+-compliant SEPARATE artifacts (dynamic linkage,
+   no GPL/nonfree flags — CI-audited by the confinement job +
+   cargo-audit); GPL encoder packs stay out-of-tree (doc 35 §5); no
+   vendored FFmpeg binaries in v1.
+3. **Versioning rule recorded, machinery-free**: versions stay
+   wave-indexed (`v0.<wave>` posture); crates stay `0.1.0` until a
+   release pipeline exists — mass version-bumping without artifacts
+   would be documentation-only progress. The audited state is tagged
+   **v0.1.0** as an audited-state POINTER — not a completeness, quality,
+   or production-readiness claim.
+4. **RLW-6 certification (REALWORLD_VALIDATION §5)**: the source was
+   re-provisioned byte-identically after the THIRD environment wipe
+   (sha256 gate `2d315daf…705f`) — fresh ytagent-farm run 36767686335
+   (DASH f136+f140, local stream-copy merge) after the new cobalt
+   fallback path returned a RE-MUXED variant that failed the identity
+   gate (`d7e3019a…` ≠ `2d315daf…`) — the gate did its job and the
+   acquisition script was hardened accordingly (identity-gated tier
+   escalation, `final_path`-based normalization). Independent baseline
+   regenerated: 2945 frames / 48 keyframes / 5,419,008 samples / decode
+   CLEAN — §3 reproduced exactly. The permanent proof re-ran
+   commit-bound (`OVE_COMMIT=22a505a`, the audit tree): 22.29 s, export
+   sha256 `baf23d2a…` IDENTICAL to the RLW-1..5 certified output,
+   reopen re-export IDENTICAL, WAV 294,294 exact, decoder opens = 1
+   (ADR-023). W17 gate 2.17 s and W18 gate 2.41 s re-passed with export
+   sha256 `ff5e67f8…` IDENTICAL (W18 hostile 11k-proposal flood → typed
+   abort, engine unchanged). Independent verification 15/15 booleans
+   true, 9/9 visual frames, launch-site pixel identity (begin
+   mean_abs_diff 0.0). Every RLW-1..5 PASS row stayed green.
+5. **Acquisition recipe hardened by the loop itself (three findings,
+   all gate-verified)**: the certification loop caught real robustness
+   gaps in the reference-media recipe — (a) `acquire_source.sh` treated
+   a byte-wrong tier-1 result as success (no identity gate inside the
+   script; `video_*` glob missed ytagent's `final_path` naming) — fixed
+   with `EXPECTED_SHA256`-gated tier escalation + `final_path`
+   resolution; (b) normalization silently remuxed a video-only source
+   from incomplete DASH parts — now a loud refusal; (c) UPSTREAM DEFECT:
+   ytagent's `_download_artifact` extracts only the FIRST media file in
+   the artifact zip and breaks (DASH f136+f140 came back video-only
+   while the artifact zip itself is complete) — worked around in the
+   acquire script by completing the fetch-back from the same run's
+   artifact (no downloader logic moves into OVE). The full chain was
+   re-proven end-to-end: tier-1 rejection → farm escalation →
+   incomplete-part refusal → artifact completion → identity gate PASS.
+   Also `docs/DEV_ENV.md` §3 was stale (libclang soname + clang resource
+   path) — corrected against the actual 2026-09 trixie packages.
+6. **Honest scope**: W21 changed ZERO engine code (audit + ADR + docs +
+   one acquisition script hardening); the workspace stays **189/189**
+   GREEN, fmt/clippy GREEN, main CI 5/5. What W21 deliberately did NOT
+   do: no release pipeline/tooling (named leg, D10), no hostile-corpus
+   acquisition beyond the primary (§10 planned), no STATUS.md rewrite
+   (§6 rule), no CI SIGILL change (tracked), no clip_assets binding
+   change (RW-NOTE-1 tracked).
 
 ## WAVE 19 deltas (2026-09-30) — performance (export decode-session budget, ADR-023)
 
@@ -938,17 +1016,15 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 21 — production audit (wave plan: 19 perf ✓ → 20 docs/release ✓ →
-21 production audit). Scope per the directive's production-readiness
-conversation: distribution strategy for codec-dependent artifacts
-(README-deferred decision), release/versioning posture (no machinery
-was invented in W20 — this is the wave that decides), plus the audit's
-standing gates. WAVE GATE (REALWORLD_VALIDATION §8 — binding, the
-certification loop): every wave re-runs the real-world proof on the SAME
-source — every existing PASS row stays green, the new capability is
-exercised on real media, output is verified independently, and wave +
-commit + hash are recorded. Completion statement required: "Wn
-implemented, existing real-media certification still passes, new
-capability exercised on real media, output independently verified" — an
-"implemented, N tests pass" statement is NOT wave completion. Land via PR
-with fmt/clippy/tests green and this file updated.
+WAVE 21 is COMPLETE (audit + ADR-024 + RLW-6 certification; this file and
+REALWORLD_VALIDATION §5 record it). The wave plan 0–21 is COMPLETE — there
+is no pre-committed W22. Per the POST-W21 POSTURE (top of this file), the
+repository continues under the certification loop only; the named residual
+legs are the roadmap. The next CONCRETE action, when engineering resumes:
+close RW-NOTE-1 (clip_assets binding for Split's right half — committed
+reopen condition, assertion already in the realworld scenario) or run the
+hostile REALWORLD/ corpus leg (REALWORLD_VALIDATION §10) — each via its own
+wave (RLW-7+) with the full certification gate, PR, and this file updated.
+Standing gates for ANY future wave are unchanged: fmt/clippy/tests green,
+real-media certification re-run byte-identical, independent verification,
+wave + commit + hash recorded.

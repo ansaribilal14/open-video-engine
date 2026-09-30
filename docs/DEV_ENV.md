@@ -43,9 +43,13 @@ cd ~/.local/debs
 apt-get download libclang1-19 libclang-common-19-dev
 dpkg -x libclang1-19*.deb x1 && dpkg -x libclang-common-19-dev*.deb x2
 mkdir -p ~/.local/llvm/lib
-cp x1/usr/lib/x86_64-linux-gnu/libclang-19.so.19.1.0 ~/.local/llvm/lib/libclang.so
-cp -r x2/usr/lib/llvm-19/lib/19 ~/.local/llvm/lib/19          # resource headers
-mkdir -p ~/.local/llvm/lib/clang && cp -r ~/.local/llvm/lib/19 ~/.local/llvm/lib/clang/19
+# soname drifts between trixie point releases — resolve, don't hardcode
+# (2026-09: libclang-19.so.19; older snapshots: libclang-19.so.19.1.0)
+LIBCLANG_SO="$(ls x1/usr/lib/x86_64-linux-gnu/libclang-19.so.* | head -1)"
+cp "$LIBCLANG_SO" ~/.local/llvm/lib/libclang.so
+# resource headers live at llvm-19/lib/clang/<ver>/ (NOT lib/19)
+RESDIR="$(ls -d x2/usr/lib/llvm-19/lib/clang/*/ | head -1)"
+mkdir -p ~/.local/llvm/lib/clang && cp -r "$RESDIR" ~/.local/llvm/lib/clang/
 ```
 
 No gcc in the container -> bindgen's `include_next <limits.h>` chain breaks.
