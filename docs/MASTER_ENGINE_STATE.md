@@ -4,20 +4,69 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1/2/3/4/5/6 = real-world certification trail)
+WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + RLW-7 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1..7 = real-world certification trail)
 DATE: 2026-09-30
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20 (1d889a0); W21 = PR #21 (bee72c5, main CI 5/5 green, tagged v0.1.0 audited-state POINTER)
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20 (1d889a0); W21 = PR #21 (bee72c5, main CI 5/5 green, tagged v0.1.0 audited-state POINTER); RLW-7 = RW-NOTE-1 closure (gate commit c41f520)
 
 POST-W21 POSTURE (binding, per the W21 audit §3 decision 3): the wave plan
 (0–21) is COMPLETE. The repository continues under the CERTIFICATION LOOP
-only — any future engineering wave re-runs the real-media gate (RLW-7+) and
-updates this file. The named residuals are the roadmap, not forgotten:
+only — any future engineering wave re-runs the real-media gate (RLW-8+)
+and updates this file. The named residuals are the roadmap, not forgotten:
 platform runtime legs (D7 PARTIAL), real-GPU (D8 EXPERIMENTAL), release
-pipeline tooling (D10 PARTIAL), hostile REALWORLD/ corpus, RW-NOTE-1
-clip_assets binding, log-flood CPU budget, CI bundled-FFmpeg SIGILL. Next
-concrete engineering wave when one is commissioned: close RW-NOTE-1 or the
-hostile-corpus leg (REALWORLD_VALIDATION §10) — both have committed reopen
-conditions.
+pipeline tooling (D10 PARTIAL), hostile REALWORLD/ corpus, log-flood CPU
+budget, CI bundled-FFmpeg SIGILL (recurrence watch — root-caused and fixed
+at W0.5, ADR-012). RW-NOTE-1 (clip_assets binding) was CLOSED by RLW-7 with
+byte-identical certified output. Next concrete engineering wave when one is
+commissioned: the hostile-corpus leg (REALWORLD_VALIDATION §10) — committed
+reopen condition; requires user approval before it starts.
+
+## RLW-7 deltas (2026-09-30) — RW-NOTE-1 closure (Split clip_assets binding)
+
+1. **The tracked latent correctness defect is closed**: Split's right half
+   now receives the SAME `clip_assets` binding as the clip it was split
+   from. `record_entry_bindings` (the ONE function shared by execute AND
+   replay) consumes the Split payload — it already carried both the source
+   id and `new_id`, so NO log-grammar/schema change was needed. Asset-free
+   splits add nothing (mirrors `Insert { asset: None }`). Undo/redo never
+   mutates the map (binding permanence, v1 rule since W6; Split's inverse
+   is Batch[Remove, Resize]).
+2. **Two binding-parity defects found BY the RLW-7 tests and fixed in the
+   same closure**: (a) `Project::open` never restored `clip_assets` from
+   the snapshot mirror — after ANY compaction, bindings folded into the
+   snapshot were rebuilt only from the log suffix and silently lost (they
+   were still hash-covered, so loads validated); now the mirror is the
+   binding authority and suffix replay appends onto it. (b) the open()
+   reconciliation hash excluded the binding map — a manifest rewritten at
+   load drifted to a binding-free value; the hash now covers the rebuilt
+   map (same shape touch_manifest/snapshot use).
+3. **TDD discipline held**: 6 new conformance tests (ove-project/
+   tests/bindings.rs) went RED first — the pre-fix tree failed the
+   right-half-binding, replay-parity, and compaction-parity pins — then
+   GREEN after the fix. The realworld scenario binding assertion moved
+   5/6 → **6/6**.
+4. **The certification loop pinned the invariant that matters**: the fix is
+   bookkeeping-only (the render path never read `clip_assets`), and the
+   real media proved it — permanent proof 22.26 s, export sha256
+   `baf23d2a…` IDENTICAL to the RLW-1..6 certified output, reopen
+   re-export IDENTICAL, WAV 294,294 exact, decoder opens = 1 (ADR-023);
+   W17 gate 2.15 s and W18 security gate 2.38 s re-passed with export
+   sha256 `ff5e67f8…` IDENTICAL (hostile 11k-proposal flood → typed
+   abort, engine unchanged). No normalization of any hash difference was
+   needed or performed.
+5. **Source re-provisioned after the FOURTH environment wipe** (sha256
+   gate `2d315daf…705f` PASS — farm run 36787738825, DASH f136+f140,
+   local stream-copy merge, provenance chain identical to RLW-1..6). The
+   independent baseline was REGENERATED from scratch: 2945 frames /
+   48 keyframes / 5,419,008 samples / decode CLEAN — §3 reproduced
+   exactly. Independent verification 15/15 booleans true, 9/9 visual
+   frames, launch-site pixel identity (begin mean_abs_diff 0.0).
+6. **Honest scope**: one known correctness gap closed cleanly; zero
+   rendering, multi-source, verb, or schema changes (v1 single-source
+   render semantics preserved). Workspace **195/195** GREEN (+6 binding
+   conformance); fmt GREEN; clippy GREEN (-D warnings, workspace, all
+   targets). NOT done (future waves, each needs user approval): hostile
+   REALWORLD/ corpus (RLW-8 candidate), decoder pixel-bomb caps (ADR-022
+   residual), D7/D8/D10 legs.
 
 ## WAVE 20 deltas (2026-09-30) — docs/release (documentation integrity, release hygiene, RLW-5)
 
@@ -1000,31 +1049,40 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
   receipts. Confidence 0.9. Reopen: user-approval ladder step; Tier B
   WASM prototype; capability grants + permission broker;
   distribution/signing; protocol N-1 policy.
+- RW-NOTE-1 closure (2026-09-30, RLW-7): Split's right half carries the
+  SAME clip_assets binding as the split clip — record_entry_bindings
+  consumes the Split payload (execute ≡ replay); the snapshot mirror is
+  the binding authority across compaction (open() restores the map
+  BEFORE suffix replay and the reconciliation hash covers it); undo/redo
+  never mutates the map (binding permanence). Confidence 0.93 (6 new
+  conformance tests RED→GREEN + realworld 6/6 bindings + both certified
+  export hashes byte-identical post-fix). Reopen: the multi-source
+  render-by-binding wave must keep the RLW-7 replay/compaction parity
+  pins green; a Batch payload carrying Insert/Split would still skip
+  binding bookkeeping — no in-repo producer exists today (the only
+  Batch constructors are timeline inverses), re-examine if a client
+  gains batch inserts.
 
 ## Unresolved decisions (registry)
 
 - NLE derived-verb surface (ripple/roll/slip/slide/insert/overwrite/extract/lift):
   record primitive-vs-derived table when timeline work resumes (directive §6.2) —
   not before.
-- RW-NOTE-1 (TRACKED ARCHITECTURAL GAP, from RLW-1): Split's right half
-  receives no `clip_assets` binding — `record_entry_bindings` does not
-  consume the new clip id (5 of 6 clips bound). Inert under the v1
-  single-source render mapping; MUST be closed before multi-source
-  render-by-binding lands (until then it would bind the wrong source).
-  Stays tracked until the multi-source/binding model is actually
-  implemented and the realworld scenario asserts correct bindings.
 
 ## Explicit next action
 
 WAVE 21 is COMPLETE (audit + ADR-024 + RLW-6 certification; this file and
 REALWORLD_VALIDATION §5 record it). The wave plan 0–21 is COMPLETE — there
-is no pre-committed W22. Per the POST-W21 POSTURE (top of this file), the
+is no pre-committed W22. RLW-7 is COMPLETE (RW-NOTE-1 closed; this file,
+REALWORLD_VALIDATION §5 RLW-7 rows, and the ove-project binding
+conformance record it). Per the POST-W21 POSTURE (top of this file), the
 repository continues under the certification loop only; the named residual
-legs are the roadmap. The next CONCRETE action, when engineering resumes:
-close RW-NOTE-1 (clip_assets binding for Split's right half — committed
-reopen condition, assertion already in the realworld scenario) or run the
-hostile REALWORLD/ corpus leg (REALWORLD_VALIDATION §10) — each via its own
-wave (RLW-7+) with the full certification gate, PR, and this file updated.
+legs are the roadmap. The next CONCRETE action, when the user commissions
+it: run the hostile REALWORLD/ corpus leg (REALWORLD_VALIDATION §10) via
+its own wave (RLW-8) with the full certification gate, PR, and this file
+updated — WITH the ADR-022 decoder pixel-bomb cap conversation landing in
+the same wave or immediately after it (the corpus leg is the planned test
+vehicle for those caps). RLW-8 MUST NOT start without user approval.
 Standing gates for ANY future wave are unchanged: fmt/clippy/tests green,
 real-media certification re-run byte-identical, independent verification,
 wave + commit + hash recorded.

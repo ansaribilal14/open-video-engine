@@ -222,6 +222,29 @@ wipe; the identity gate caught a new acquisition pitfall on the way.
 | visual sanity (9 frames at 0/0.5/1/2/2.7/3/4/5/6.6 s) | PASS — real Artemis I launch footage: night-crowd establishing shot ("NOVEMBER 16, 2022" title), keyframed overlay composite, pad close-up with ignition steam ("929" burn timer); exact geometry, no corruption/frozen/black frames |
 | audited-tree integrity | PASS — the audit's evidence tree is the gate tree: workspace 189/189 GREEN, fmt/clippy clean, zero engine diffs between `22a505a` and the W20 gate tree (`f2dd181` + README/audit/ADR docs) |
 
+### Wave-RLW-7 (RW-NOTE-1 closure — Split clip_assets binding) results (2026-09-30)
+
+Scope: identical scope-of-proof wording as above — a verified EDITED
+SEGMENT (160 frames = 6.673333 s), never a full-source pass-through.
+New capability under certification: the RW-NOTE-1 binding bookkeeping
+closure (`record_entry_bindings` consumes Split; snapshot-mirror binding
+restore at open). The engine's render path does not read `clip_assets`
+(v1 single-source render), so the certified OUTPUT BYTES must not move —
+and they did not: both pinned hashes re-verified IDENTICAL.
+
+| Check | Result |
+|---|---|
+| source re-provision + sha256 identity gate `2d315daf…705f` | PASS — farm run 36787738825 (DASH f136+f140, local stream-copy merge); the sandbox lost the local copy and the acquire-script background run was reaped, so the script's documented farm steps were orchestrated manually (dispatch → poll → artifact fetch-back → normalize → gate); provenance chain identical to RLW-1..6 |
+| independent baseline REGENERATED from scratch | PASS — `baseline_analysis.sh` + `baseline_facts.py` reproduced §3 exactly: 2945 frames, 5,419,008 samples (full independent PCM decode), 48 keyframes, decode CLEAN under `-xerror` |
+| permanent proof re-run on the SAME source (commit-bound `OVE_COMMIT=c41f520`) | PASS — 22.26 s; export sha256 `baf23d2a…` IDENTICAL to the RLW-1..6 certified output; reopen re-export IDENTICAL; WAV 294,294 samples exact |
+| ADR-023 session budget on real media | PASS — decoder opens per 160-frame export = 1 |
+| W17 plugin gate re-run (existing certification) | PASS — 2.15 s, split applied through the command bus, receipt recorded, export sha256 `ff5e67f8…` IDENTICAL to the W18-certified value |
+| W18 security gate re-run (existing certification) | PASS — 2.38 s; hostile 11k-proposal flood → typed budget abort, state hash unchanged by the attack, legit plugin still applied its edit, export sha256 `ff5e67f8…` IDENTICAL |
+| RW-NOTE-1 binding assertion on real media | PASS — realworld scenario bindings 5/6 → **6/6** (clip2b carries the SAME asset binding as clip2; assertion updated in the test) |
+| new binding conformance (unit level) | PASS — ove-project/tests/bindings.rs 6/6: split binds right half with no loss/reassignment; chain inheritance; undo/redo map stability (binding permanence); full replay parity (map + hash) incl. undo/redo markers; compaction parity (snapshot mirror restore + suffix append); split-only-history reopen |
+| independent output verification | PASS — 15/15 boolean checks true, zero false: clean `-xerror` decode of all three gate outputs (160/80/80 frames @ 24000/1001), container 6.673333 s / 3.336667 s / 3.336667 s, WAV 294,294, launch-site pixel identity (begin mean_abs_diff 0.0) |
+| visual sanity (representative frames) | PASS — begin (black fade-in, pixel-identical to source), split seam 2.70 s (left/right segments at the certified boundary), clip4 5.00 s (pad close-up, "929" burn timer), overlay mid-fade 1.50 s (keyframed composite exact); no corruption/frozen/black-error frames |
+
 ## 6. Real defects found by real media (the point of this workflow)
 
 | ID | Defect | Fix | Pin |
@@ -231,11 +254,16 @@ wipe; the identity gate caught a new acquisition pitfall on the way.
 | REALWORLD-BUG-3 | `DecodeSource::fetch` seeked EXACTLY at the mapped target; on real NTSC media the target falls BETWEEN frame pts and the adapter's Exact seek forward-drops frames ≤ target (D-4) — the D-5 floor frame was never delivered (`SourceFrameMissing`). Corpus targets were always exact frame pts. | Fetch now lands at the greatest keyframe ≤ target (the ADR-013 `plan_seek` discipline) and decodes forward keeping the last frame ≤ target; sequential same-GOP targets reuse the decoder position; targets at/before the last floor re-seek. | the realworld test itself (renders the NTSC source end-to-end) |
 | REALWORLD-BUG-4 | `fetch` DISCARDED the popped past-target frame. Latent while decode sessions died every frame (per-frame rebuilds re-seeked everything — the BUG-3 cursor reuse was dead code in exports); the W19 export session lifetime (ADR-023) made the next sequential fetch — whose target IS that frame's pts under CFR — decode past its floor and return None (`SourceFrameMissing at 1/24`). Found by the W19 failing budget test the same day the lifetime fix landed. | One-frame `pending` pushback in `VideoSession` (bounded memory): the past-target frame is cached and served as the next fetch's floor candidate; a target between the last floor and the pending frame (VFR/multi-rate gap) re-seeks and rebuilds — the D-5 floor rule stays total. YUV→RGBA converts once on the final floor frame. | `export_session_budget.rs` (the failing test that exposed it) + the permanent proof re-export sha256 identity |
 
-RW-NOTE-1 (recorded, unfixed by design this wave): `record_entry_bindings`
-does not consume Split's right half — `clip_assets` has no entry for the new
-clip id (5 of 6 clips). Inert under the v1 single-source render; MUST be
-closed before multi-source render-by-binding lands (it would bind the wrong
-source). Assertion in the realworld test documents the current count.
+RW-NOTE-1 (CLOSED by RLW-7, 2026-09-30 — was: recorded, unfixed by design
+this wave): `record_entry_bindings` now consumes Split — the right half
+carries the SAME asset binding as the split clip (execute AND replay; the
+snapshot mirror carries the map across compaction). The realworld scenario
+asserts 6/6 bound clips. Closed WITHOUT touching the v1 single-source
+render semantics (the render path never read the binding map); the
+certified export hashes stayed byte-identical (`baf23d2a…`, `ff5e67f8…`).
+The gap remains a live correctness REQUIREMENT for the future
+multi-source render-by-binding wave: any binding-model change must keep
+the RLW-7 replay/compaction parity pins green.
 
 ## 7. Capability matrix (as exercised by THIS wave)
 
