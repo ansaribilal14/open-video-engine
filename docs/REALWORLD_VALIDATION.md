@@ -87,6 +87,18 @@ span 160 output frames = 160160 ticks = 6.673333 s):
 
 ## 5. Wave-RLW-1 results (2026-09-29, commit at HEAD c4b1d48 + this wave)
 
+> **Scope of proof — binding wording for every claim derived from this
+> workflow.** The certified artifact is a deterministic **edited segment**:
+> 160 output frames = 6.673333 s, derived from the real source through real
+> engine edits (split, resize, keyframed overlay, sample-exact audio cuts)
+> and independently verified. The correct claim is: *"the engine processed a
+> real source and produced a verified edited segment."* It is **NOT**
+> *"the engine successfully processed the entire original video end-to-end"*
+> — the full 122.88 s pass-through is not claimed anywhere, was not
+> exercised, and is not a certified capability. Full-source traversal may
+> become its own scenario row in a later wave; until that row exists and
+> passes, this scope statement is the exact meaning of every PASS row below.
+
 | Check | Result |
 |---|---|
 | import/probe vs independent baseline | PASS (geometry/cadence/audio/keyframes exact) |
@@ -141,7 +153,7 @@ source). Assertion in the realworld test documents the current count.
 | Scaling/affine transforms | NOT YET IMPLEMENTED (integer translate only) |
 | H.264/AV1 encoding out | NOT YET IMPLEMENTED (v1 mpeg4-first, ADR-015) |
 
-## 8. Regression rule
+## 8. Regression rule and the certification loop (binding per wave)
 
 For every future major wave: re-run this test against the SAME source
 (re-acquire via `scripts/realworld/acquire_source.sh` if the local copy is
@@ -150,6 +162,41 @@ capabilities to the scenario, extend §5 with a new wave-RLW row, and keep the
 previous records (the machine-readable `realworld_record.json` per run is the
 evidence trail). A wave that regresses any PASS row above is not complete
 unless the change is an intentional, documented contract change.
+
+The certification loop is the definition of wave progress — every wave
+passes through it before merge:
+
+```
+    Real reference video
+            │
+            ▼
+    Current OVE capabilities
+            │
+            ▼
+    Technical verification   (independent tools; OVE is never the authority)
+            │
+            ▼
+    Visual proof             (frame inspection at representative points)
+            │
+            ▼
+    Record wave + commit + hash   (realworld_record.json evidence trail)
+            │
+            ▼
+         NEXT WAVE  ──▶ repeat
+```
+
+Required wave-completion statement (no weaker paraphrase counts):
+
+> "Wn implemented. Existing real-media certification still passes. The new
+> capability was exercised on real media. Output independently verified."
+> — with wave id, merge commit, engine state hash, and the
+> `realworld_record.json` path.
+
+A wave that reports only "implemented, N tests pass" is NOT complete under
+this protocol. The rhythm is: build wave → real-video gate → fix genuine
+regressions → verify → merge → next wave. The gate exists to catch real
+defects early (RLW-1 caught three) — not to replace engine building; if the
+gate passes, move on.
 
 ## 9. Reproducibility
 
@@ -178,3 +225,25 @@ images lack ffmpeg — the farm returns unmerged DASH parts; normalization is a
 local stream copy. The YouTube-side JSON license metadata could not be
 fetched from this environment; the public-domain status rests on NASA's
 published media guidelines (recorded above).
+
+## 10. Harder real-media corpus (PLANNED — primary stays primary)
+
+The NASA clip is the PRIMARY permanent reference; it is never replaced or
+demoted. The next robustness step (its own later wave, NOT a substitution)
+is a small corpus of deliberately difficult real media:
+
+```
+REALWORLD/
+├── primary_nasa.mp4      # the permanent reference (§2) — proves ordinary operation
+├── portrait_phone.mp4    # rotation / display-matrix metadata stress        (planned)
+├── vfr_phone.mp4         # variable-frame-rate phone capture                (planned)
+├── long_gop.mp4          # long-GOP source: seek + forward-decode stress    (planned)
+└── audio_variant.mp4     # different audio geometry (48 kHz mono / 5.1)     (planned)
+```
+
+The primary proves ordinary real-world operation; the harder corpus proves
+robustness. Rules for every corpus addition — identical discipline to §2–§3:
+license-clean public-domain/CC source · full provenance record · independent
+ffprobe baseline · sha256 identity gate · never committed to git · each new
+file gets its own scenario rows and per-run evidence records. No addition may
+weaken or replace the primary NASA scenario.

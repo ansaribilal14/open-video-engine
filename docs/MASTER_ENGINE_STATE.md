@@ -690,15 +690,27 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 - NLE derived-verb surface (ripple/roll/slip/slide/insert/overwrite/extract/lift):
   record primitive-vs-derived table when timeline work resumes (directive §6.2) —
   not before.
+- RW-NOTE-1 (TRACKED ARCHITECTURAL GAP, from RLW-1): Split's right half
+  receives no `clip_assets` binding — `record_entry_bindings` does not
+  consume the new clip id (5 of 6 clips bound). Inert under the v1
+  single-source render mapping; MUST be closed before multi-source
+  render-by-binding lands (until then it would bind the wrong source).
+  Stays tracked until the multi-source/binding model is actually
+  implemented and the realworld scenario asserts correct bindings.
 
 ## Explicit next action
 
 WAVE 17 — plugins: the plugin-tier research (28_PLUGINS) becomes a
 typed plugin client at the same command-bus boundary (process/WASM
 tier behind the same Engine surface; no new semantics outside the
-command grammar). Before that, every future wave MUST re-run the
-real-world proof (docs/REALWORLD_VALIDATION.md §8 regression rule):
-extend the scenario with the wave's new capabilities and keep every
-existing PASS row green. Then 18 security, 19 perf, 20 docs/release,
-21 production audit. Land via PR with fmt/clippy/tests green and this
-file updated.
+command grammar). WAVE GATE (REALWORLD_VALIDATION §8 — binding, the
+certification loop): after landing, re-run the real-world proof on
+the SAME source — every existing PASS row stays green, the new
+plugin capability is exercised on real media, output is verified
+independently, and wave + commit + hash are recorded. Completion
+statement required: "Wn implemented, existing real-media
+certification still passes, new capability exercised on real media,
+output independently verified" — an "implemented, N tests pass"
+statement is NOT wave completion. Then 18 security, 19 perf,
+20 docs/release, 21 production audit. Land via PR with fmt/clippy/
+tests green and this file updated.
