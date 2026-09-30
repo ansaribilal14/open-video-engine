@@ -4,9 +4,60 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 18 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security — all landed; RLW-1/2/3 = real-world certification trail)
+WAVE: 19 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf — all landed; RLW-1/2/3/4 = real-world certification trail)
 DATE: 2026-09-30
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078)
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (this PR)
+
+## WAVE 19 deltas (2026-09-30) — performance (export decode-session budget, ADR-023)
+
+1. **The hot spot was proven with a deterministic instrument, not wall-clock
+   folklore**: the new `ove_engine::decoder_opens` counter exposed that
+   `export_reencode` rebuilt the decode-source map (and its decoder
+   sessions) for EVERY output frame — every exported frame re-OPENED the
+   demuxer+decoder, re-seeked to the keyframe floor, and re-decoded the
+   keyframe→target span for every placement. O(N·GOP) decodes where O(N)
+   suffices. The fetch loop also converted EVERY intermediate decoded
+   frame YUV→RGBA and kept only the last (dozens of wasted 1280×720
+   conversions per fetch on real GOP structure).
+2. **ADR-023 — the export decode-session budget**: ONE decoder open per
+   source per export. `DecodeSource` now owns its data (cloned
+   `SourceMedia`, owned dir path) so the source map carries no borrow of
+   the engine; `export_reencode` builds the map ONCE (`build_decode_sources`)
+   and renders through `render_frame_with` with sessions alive across the
+   whole frame loop — the REALWORLD-BUG-3 sequential cursor-reuse
+   discipline finally engages in the export path. `render_frame` keeps its
+   one-shot signature (spot renders, MCP status: zero behavior change).
+3. **REALWORLD-BUG-4 — a REAL latent defect EXPOSED by the fix** (the
+   certification loop working as designed): the fetch loop DISCARDED the
+   popped past-target frame, so with a surviving session the next
+   sequential fetch (whose target is exactly that frame's pts under CFR)
+   decoded past its floor and returned None (`SourceFrameMissing at
+   1/24`). Invisible pre-W19 because per-frame session rebuilds re-seeked
+   every fetch — the cursor-reuse discipline was dead code in exports.
+   Fix: a ONE-FRAME `pending` pushback in `VideoSession` (bounded memory);
+   a target that falls BETWEEN the last floor and the pending frame
+   (VFR/multi-rate gap) falls back to the re-seek rebuild — the D-5 floor
+   rule stays total. YUV→RGBA now converts ONCE, on the final floor frame.
+4. **Determinism survives the optimization — the strongest pin**: the
+   160-frame real-media export sha256 `baf23d2a…` is IDENTICAL between the
+   pre-fix tree (worktree @ `adcafd9`) and the optimized tree, same source
+   (sha256 gate `2d315daf…705f`), same machine. Every RLW-1/2/3 PASS row
+   stayed green; W17 plugin gate re-ran green (2.08 s); W18 security gate
+   re-ran green (2.33 s).
+5. **Measured on the permanent proof (real NASA media, machine-relative)**:
+   end-to-end proof 129.90 s → 22.26 s (**5.8×**); export leg ~65 s →
+   10.9 s (~6×); decoder opens per 160-frame export **160 → 1**. The
+   `realworld_record.json` `perf` section (additive) carries the per-leg
+   wall-clock + open counts; the deterministic budget lives in
+   `ove-engine/tests/export_session_budget.rs` (3 tests; the process-global
+   counter is Mutex-serialized per measurement).
+6. **Honest scope**: the two-track same-source shape still re-seeks per
+   frame (backward jump between placements) — measured acceptable at
+   10.9 s/export; per-placement session split is the named future leg.
+   NOT done (future waves, software renderer stays the correctness
+   reference): threading/pool wiring, GPU perf, blend-division tuning,
+   allocator churn. Workspace **189/189** GREEN (+3 budget conformance);
+   fmt GREEN; clippy GREEN (workspace, all targets).
 
 ## WAVE 18 deltas (2026-09-30) — security hardening (untrusted-input budgets, ADR-022)
 
@@ -691,10 +742,27 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
 7 audio ✓ → 8 keyframes ✓ → 9 GPU ✓ → 10–12 platform-leg evidence ✓ →
 13 conformance ✓ → 14 headless ✓ → 15 AI/MCP ✓ → 16 scripting ✓ →
-17 plugins ✓ → 18 security ✓ → 19 perf → 20 docs/release → 21 production audit.
+17 plugins ✓ → 18 security ✓ → 19 perf ✓ → 20 docs/release → 21 production audit.
 
 ## Resolved decisions (registry)
 
+- ADR-023 (2026-09-30): export decode-session lifetime — the decode-source
+  map is built ONCE per export (budget: ONE decoder open per source per
+  export, pinned deterministically by the `decoder_opens` instrument +
+  `export_session_budget.rs`, never wall-clock); sequential fetches reuse
+  the decoder cursor (the REALWORLD-BUG-3 discipline now live in the
+  export path); fetch keeps a ONE-FRAME pending pushback (bounded memory)
+  serving the next sequential fetch; a target between the last floor and
+  the pending frame (VFR/multi-rate gap) falls back to the re-seek rebuild
+  (D-5 stays total); YUV→RGBA converts once on the final floor frame.
+  Export bytes UNCHANGED — sha256 `baf23d2a…` identical pre/post on the
+  real NASA source (determinism survives the optimization). Confidence
+  0.9 (5.8× end-to-end / ~6× export leg on the reference machine; the
+  two-track same-source shape still re-seeks per frame — measured
+  acceptable; per-placement sessions are the named future leg). Reopen:
+  a legit workload where the re-seek fallback dominates (the VFR corpus
+  leg); per-placement session split; threading/pool decisions ride their
+  own waves.
 - ADR-022 (2026-09-30): security hardening v1 — declared untrusted-input
   resource budgets at every client boundary (project files, plugin
   stdio, MCP stdio, Rhai scripts), enforced at READ time via take-window
@@ -818,13 +886,13 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 19 — performance (wave plan: 19 perf, 20 docs/release, 21 production
-audit). WAVE GATE (REALWORLD_VALIDATION §8 — binding, the certification
-loop): every wave re-runs the real-world proof on the SAME source — every
-existing PASS row stays green, the new capability is exercised on real
-media, output is verified independently, and wave + commit + hash are
-recorded. Completion statement required: "Wn implemented, existing
-real-media certification still passes, new capability exercised on real
-media, output independently verified" — an "implemented, N tests pass"
-statement is NOT wave completion. Land via PR with fmt/clippy/
-tests green and this file updated.
+WAVE 20 — docs/release (wave plan: 19 perf ✓, 20 docs/release, 21
+production audit). WAVE GATE (REALWORLD_VALIDATION §8 — binding, the
+certification loop): every wave re-runs the real-world proof on the SAME
+source — every existing PASS row stays green, the new capability is
+exercised on real media, output is verified independently, and wave +
+commit + hash are recorded. Completion statement required: "Wn
+implemented, existing real-media certification still passes, new
+capability exercised on real media, output independently verified" — an
+"implemented, N tests pass" statement is NOT wave completion. Land via PR
+with fmt/clippy/tests green and this file updated.

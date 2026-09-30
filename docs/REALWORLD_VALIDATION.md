@@ -152,6 +152,28 @@ budgets, exercised ON the real reference media
 | independent output decode | PASS — ffprobe: 80 frames, 24000/1001, container 3.336667 s |
 | deterministic record (wave + commit + hash) | PASS — `realworld_record_security.json` with hostile-flood evidence (abort, unchanged-hash), legit-plugin receipt, export sha256 |
 
+### Wave-RLW-4 (W19 performance) results (2026-09-30)
+
+Scope: identical scope-of-proof wording as above — a verified EDITED
+SEGMENT (160 frames = 6.673333 s), never a full-source pass-through. New
+capability under certification: the ADR-023 export decode-session budget
+(ONE decoder open per source per export), exercised ON the real reference
+media. The source was RE-ACQUIRED this wave (the work environment was
+wiped; media never lives in git) — the sha256 identity gate proves it is
+byte-identical to the RLW-1 reference.
+
+| Check | Result |
+|---|---|
+| source re-acquisition + sha256 identity gate `2d315daf…705f` | PASS — byte-identical to the §2 provenance record (ytagent farm run 36693710457, DASH parts, local stream-copy merge) |
+| permanent proof re-run on the SAME source | PASS — every Wave-RLW-1/2/3 row stayed green on the optimized build (22.3 s run, was 129.9 s pre-fix) |
+| W17 plugin gate re-run (existing certification) | PASS — 2.08 s |
+| W18 security gate re-run (existing certification) | PASS — 2.33 s |
+| ADR-023 session budget on real media | PASS — decoder opens per 160-frame export = 1 (was 160 pre-fix; measured by the `decoder_opens` instrument, pre-fix tree = worktree @ `adcafd9`) |
+| export determinism ACROSS the optimization | PASS — export sha256 `baf23d2a…` IDENTICAL pre-fix vs post-fix (same source, same machine) — byte-identical output at 5.8× the speed |
+| performance evidence (machine-relative, instrumented) | PASS — end-to-end proof 129.90 s → 22.26 s (5.8×); export leg ~65 s → 10.9 s (~6×); `realworld_record.json` `perf` section carries per-leg wall-clock + open counts |
+| independent output decode | PASS — ffprobe: 160 frames, 24000/1001, container 6.673333 s, clean `-xerror` decode, WAV 294,294 samples |
+| visual sanity (launch + overlay composite + clip4 close-up) | PASS — real launch-site footage, keyframed pan/fade geometry exact, no corruption |
+
 ## 6. Real defects found by real media (the point of this workflow)
 
 | ID | Defect | Fix | Pin |
@@ -159,6 +181,7 @@ budgets, exercised ON the real reference media
 | REALWORLD-BUG-1 | Render plans declared the RAW probe color tags as the fetch contract, but the boundary conversion stamps fetched frames {src primaries/transfer, Bt709, Full}. Whenever probe range == working-space range (ANY real file with real LIMITED metadata), the plan omitted the ColorConvert stamp pass and exec failed `TagMismatch`. The synthetic corpus probes tag-Unknown — every existing test took the convert branch vacuously. | `build_render_input` now declares `boundary_rgba_stamp(video.color)` — the tags fetch actually delivers (single source of truth shared with the conversion). | `boundary_stamp_tests::stamp_matches_converted_envelope` |
 | REALWORLD-BUG-2 | YUV→RGBA conversion hardwired LIMITED-range expansion even for declared FULL-range sources (level crush on real consumer media that declares Full). | Range-aware integer expansion (Limited / Full exact; Unknown keeps the documented limited assumption). | `limited_black_maps_to_zero`, `full_range_luma_is_identity` |
 | REALWORLD-BUG-3 | `DecodeSource::fetch` seeked EXACTLY at the mapped target; on real NTSC media the target falls BETWEEN frame pts and the adapter's Exact seek forward-drops frames ≤ target (D-4) — the D-5 floor frame was never delivered (`SourceFrameMissing`). Corpus targets were always exact frame pts. | Fetch now lands at the greatest keyframe ≤ target (the ADR-013 `plan_seek` discipline) and decodes forward keeping the last frame ≤ target; sequential same-GOP targets reuse the decoder position; targets at/before the last floor re-seek. | the realworld test itself (renders the NTSC source end-to-end) |
+| REALWORLD-BUG-4 | `fetch` DISCARDED the popped past-target frame. Latent while decode sessions died every frame (per-frame rebuilds re-seeked everything — the BUG-3 cursor reuse was dead code in exports); the W19 export session lifetime (ADR-023) made the next sequential fetch — whose target IS that frame's pts under CFR — decode past its floor and return None (`SourceFrameMissing at 1/24`). Found by the W19 failing budget test the same day the lifetime fix landed. | One-frame `pending` pushback in `VideoSession` (bounded memory): the past-target frame is cached and served as the next fetch's floor candidate; a target between the last floor and the pending frame (VFR/multi-rate gap) re-seeks and rebuilds — the D-5 floor rule stays total. YUV→RGBA converts once on the final floor frame. | `export_session_budget.rs` (the failing test that exposed it) + the permanent proof re-export sha256 identity |
 
 RW-NOTE-1 (recorded, unfixed by design this wave): `record_entry_bindings`
 does not consume Split's right half — `clip_assets` has no entry for the new
