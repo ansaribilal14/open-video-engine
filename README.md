@@ -84,14 +84,23 @@ Workspace tests green; fmt/clippy clean at `-D warnings`.
 
 **Current work order**: `docs/MASTER_ENGINE_STATE.md` (single source of truth —
 `STATUS.md` is the audit-day snapshot and is kept as a historical record; per-wave
-truth lives only in the state doc). Next: wave 21 production-readiness audit.
+truth lives only in the state doc). The planned wave series (… 19 perf →
+20 docs/release → 21 production audit) is COMPLETE; the repository continues
+under the real-media certification loop, with the named residuals tracked in
+`research/audit/PRODUCTION_READINESS_AUDIT.md`.
 Detailed per-subsystem classification as of the takeover audit: `STATUS.md`.
 
 ## License
 
 The engine's own code is dual-licensed `MIT OR Apache-2.0` (LICENSE-MIT,
 LICENSE-APACHE, per-crate `license` fields). Dependency license discipline is
-audited in `docs/research/35_LICENSES.md`; libav* linkage is isolated to
-`engine/ove-decode` and `engine/ove-encode` and configured LGPL-only
-(DECODER_SPEC §4). Distribution strategy for codec-dependent artifacts remains
-gated on the wave-21 production-readiness audit.
+audited in `docs/research/35_LICENSES.md`; libav* linkage is confined to the
+adapter crates `engine/ove-decode` and `engine/ove-encode` (CI-enforced closed
+allowlist, DECODER_SPEC §5 + ENCODER_SPEC §5) and configured LGPL-only
+(DECODER_SPEC §4). Distribution of codec-dependent artifacts follows
+ADR-024: the libav-free core ships under MIT OR Apache-2.0 without
+qualification; codec-capable builds are LGPL-2.1+-compliant separate
+artifacts (dynamic linkage, no GPL/nonfree build flags, license notices +
+source pointer); GPL codec capabilities ship only as out-of-tree packs and
+never enter this repository's build; no vendored FFmpeg binaries are
+distributed in v1.
