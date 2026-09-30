@@ -154,6 +154,10 @@ fn realworld_security_gate() {
         pre_hash,
         "the denied flood is INERT on real media — document state untouched"
     );
+    // capture the post-attack hash NOW (before the legit edit advances it) —
+    // the record field must mean exactly what it says
+    let hash_after_attack = e.state_hash();
+    assert_eq!(hash_after_attack, pre_hash);
     // render identity also survives the attack
     assert_eq!(
         blake3_frame(
@@ -227,8 +231,8 @@ fn realworld_security_gate() {
         "hostile_flood": {
             "kind": "proposal flood (11k default-DENY proposals)",
             "abort": format!("{err}"),
-            "state_hash_after_attack": e.state_hash(),
-            "engine_unchanged": true,
+            "state_hash_after_attack": hash_after_attack,
+            "engine_unchanged": hash_after_attack == pre_hash,
         },
         "legit_plugin": {
             "applied": report.applied,
