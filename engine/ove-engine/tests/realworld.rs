@@ -24,7 +24,7 @@
 
 use std::path::{Path, PathBuf};
 
-use ove_engine::Engine;
+use ove_engine::{decoder_opens, reset_decoder_opens, Engine};
 use ove_media::{ContentHash, PixelFormat};
 use ove_render::OutputSpec;
 use ove_time::Rational;
@@ -350,9 +350,18 @@ fn realworld_reference_media_proof() {
     // -- exports -----------------------------------------------------------------
     let span = Rational::new(N_FRAMES * OUT_RATE_DEN, OUT_RATE_NUM);
     let out_av = out_dir.join("realworld_proof_av.mp4");
+    // W19 perf instrument (ADR-023): the A/V export leg is the perf-critical
+    // path (decode → convert → render → encode per output frame). The wall
+    // time and the decoder-open count land in the machine record; the open
+    // budget is pinned by export_session_budget.rs (ONE open per source per
+    // export — a per-frame count is the pre-W19 regression signature).
+    reset_decoder_opens();
+    let export_start = std::time::Instant::now();
     let info = e
         .export_reencode(&out_av, &output, N_FRAMES)
         .expect("A/V re-encode export");
+    let export_av_seconds = export_start.elapsed().as_secs_f64();
+    let export_av_decoder_opens = decoder_opens();
     assert_eq!(
         info.tracks[0].nb_frames,
         Some(N_FRAMES as u64),
@@ -371,7 +380,9 @@ fn realworld_reference_media_proof() {
     );
 
     let out_wav = out_dir.join("realworld_proof.wav");
+    let wav_start = std::time::Instant::now();
     let wav_samples = e.export_wav(&out_wav).expect("WAV export");
+    let export_wav_seconds = wav_start.elapsed().as_secs_f64();
     assert_eq!(wav_samples, audio_samples, "WAV sample count == assembly");
 
     // -- stream-copy export on real H.264 source --------------------------------
@@ -420,9 +431,13 @@ fn realworld_reference_media_proof() {
         "keyframed overlay renders byte-identical after reopen"
     );
     let out_av2 = out_dir.join("realworld_proof_av_reopen.mp4");
+    reset_decoder_opens();
+    let reexport_start = std::time::Instant::now();
     let info2 = r
         .export_reencode(&out_av2, &output, N_FRAMES)
         .expect("re-export after reopen");
+    let export_reopen_seconds = reexport_start.elapsed().as_secs_f64();
+    let export_reopen_decoder_opens = decoder_opens();
     assert_eq!(
         info.file_sha256, info2.file_sha256,
         "re-export byte-identical (deterministic software pipeline)"
@@ -448,6 +463,16 @@ fn realworld_reference_media_proof() {
         "wav_samples": wav_samples,
         "copy_export": "TYPED-UNSUPPORTED: v1 copy route is mpeg4/aac only; h264 rejected by muxer",
         "reopen_export_sha256": info2.file_sha256,
+        "perf": {
+            "note": "W19 ADR-023 instrument — wall-clock is machine-relative; the \
+                     decoder-open budget is the deterministic pin (ONE per \
+                     source per export; per-frame opens = pre-W19 defect shape)",
+            "export_av_seconds": export_av_seconds,
+            "export_av_decoder_opens": export_av_decoder_opens,
+            "export_wav_seconds": export_wav_seconds,
+            "export_reopen_seconds": export_reopen_seconds,
+            "export_reopen_decoder_opens": export_reopen_decoder_opens,
+        },
     });
     std::fs::write(
         out_dir.join("realworld_record.json"),
