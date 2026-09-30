@@ -174,6 +174,30 @@ byte-identical to the RLW-1 reference.
 | independent output decode | PASS — ffprobe: 160 frames, 24000/1001, container 6.673333 s, clean `-xerror` decode, WAV 294,294 samples |
 | visual sanity (launch + overlay composite + clip4 close-up) | PASS — real launch-site footage, keyframed pan/fade geometry exact, no corruption |
 
+### Wave-RLW-5 (W20 docs/release) results (2026-09-30)
+
+Scope: identical scope-of-proof wording as above — a verified EDITED
+SEGMENT (160 frames = 6.673333 s), never a full-source pass-through.
+W20 is a documentation/release-hygiene wave: NO engine code changed
+(gate tree `f2dd181` = `5e9d03b` + docs only), so this leg certifies
+that the shipped RELEASE DOCS describe a machine whose real-media
+certification still passes byte-identically. The source was re-provisioned
+after the second environment wipe — via the W19 farm ARTIFACT (same
+provenance chain), after a fresh acquisition attempt hit the expected
+datacenter bot-wall.
+
+| Check | Result |
+|---|---|
+| source re-provision + sha256 identity gate `2d315daf…705f` | PASS — byte-identical via the retained ytagent-farm artifact (run 36693710457, DASH f136+f140, local stream-copy merge); fresh farm run 36698485885 failed the bot-wall ("Sign in to confirm you're not a bot", all clients) — artifact reuse is the provenance-preserving path |
+| independent baseline REGENERATED from scratch | PASS — the newly committed `scripts/realworld/baseline_analysis.sh` reproduced §3 exactly from ffprobe/ffmpeg: 2945 frames, 5,419,008 samples (full independent PCM decode), 48 keyframes, decode CLEAN |
+| permanent proof re-run on the SAME source (commit-bound `OVE_COMMIT=f2dd181`) | PASS — 22.46 s; export sha256 `baf23d2a…` IDENTICAL to the RLW-1/2/3/4 certified output |
+| ADR-023 session budget on real media | PASS — decoder opens per 160-frame export = 1 |
+| W17 plugin gate re-run (existing certification) | PASS — 2.09 s, export sha256 `ff5e67f8…` IDENTICAL to the W18-certified value |
+| W18 security gate re-run (existing certification) | PASS — 2.31 s |
+| independent output verification | PASS — 15/15 boolean checks true, zero false: ffprobe 160 frames @ 24000/1001, WAV 6.673333 s, 9/9 visual frame extractions, launch-site pixel identity (begin mean_abs_diff 0.0) |
+| release hygiene | 12 fully-merged stale branches deleted (wave-7/8/9/10-12/13-14/15/16/17/18/19, realworld-validation, fix/ci-bundled-ffmpeg-sigill); repo is `main`-only |
+| documentation integrity | ADR-023 file committed (was referenced by the state doc, never written); README refreshed to the honest waves-0–19 / 13-crate posture; the §9 baseline generator now exists and is executable |
+
 ## 6. Real defects found by real media (the point of this workflow)
 
 | ID | Defect | Fix | Pin |

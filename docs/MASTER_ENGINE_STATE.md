@@ -4,9 +4,61 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 19 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf — all landed; RLW-1/2/3/4 = real-world certification trail)
+WAVE: 20 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release — all landed; RLW-1/2/3/4/5 = real-world certification trail)
 DATE: 2026-09-30
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389)
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20
+
+## WAVE 20 deltas (2026-09-30) — docs/release (documentation integrity, release hygiene, RLW-5)
+
+1. **Documentation integrity — the ADR-023 file now exists**: the W19
+   deltas and the ADR registry both referenced ADR-023, but the FILE was
+   never committed (the W19 docs commit touched only the two state
+   docs). `research/adr/ADR-023-export-decode-session-budget.md` now
+   records the real decision from its committed evidence: the
+   deterministic open-count instrument, the session-lifetime change,
+   REALWORLD-BUG-4, the byte-identity pin, and the named residuals.
+   No content was invented — every claim in the ADR cites the W19
+   record.
+2. **README refreshed to the honest posture**: the README was frozen at
+   the takeover audit ("Waves 0–2 landed", 4 crates, ADR range 001..012).
+   It now states waves 0–19, the real 13-crate layout with per-crate
+   roles, the ADR range 001..023, the certification loop + security +
+   performance posture, and re-qualifies STATUS.md as the AUDIT-DAY
+   SNAPSHOT (kept untouched per the §6 rule — other status docs are
+   historical records; the state doc is the only live truth). The
+   libav adapter allowlist wording follows the CI-enforced closed set
+   {ove-decode, ove-encode} (DECODER_SPEC §5 + ENCODER_SPEC §5, ADR-015).
+3. **The §9 baseline generator now exists**: REALWORLD_VALIDATION §9
+   step 2 referenced `baseline_facts.py`, whose own docstring referenced
+   a `baseline_analysis.sh` that was never committed — the
+   reproducibility recipe was not executable as written. The generator
+   is now committed and was PROVEN this wave: it reproduced §3 exactly
+   from scratch (2945 frames, 5,419,008 samples via full independent
+   PCM decode — ffprobe has no `-count_samples`, so the sample count is
+   byte-derived from a decode, which is more independent than metadata;
+   48 keyframes from packet flags; decode CLEAN under `-xerror`).
+4. **Release hygiene — 12 fully-merged stale branches deleted** (the
+   wave-7/8/9/10-12/13-14/15/16/17/18/19 topic branches,
+   realworld-validation, and fix/ci-bundled-ffmpeg-sigill — all verified
+   `--merged main` before deletion). The repo is `main`-only. No tags,
+   no CHANGELOG, no release machinery was invented: distribution
+   strategy stays gated on the W21 production-readiness audit
+   (anti-overbuild).
+5. **RLW-5 certification (REALWORLD_VALIDATION §5)**: the source was
+   re-provisioned byte-identically after the second environment wipe
+   (sha256 gate `2d315daf…705f`) — via the RETAINED W19 farm artifact
+   after a fresh farm run hit the expected datacenter bot-wall. The
+   permanent proof re-ran commit-bound (`OVE_COMMIT=f2dd181`): 22.46 s,
+   export sha256 `baf23d2a…` IDENTICAL, decoder opens = 1; W17 gate
+   2.09 s and W18 gate 2.31 s re-passed with export sha256 `ff5e67f8…`
+   IDENTICAL; independent verification 15/15 booleans true, 9/9 visual
+   frames. Every RLW-1..4 PASS row stayed green.
+6. **Honest scope**: W20 changed ZERO engine code (docs + one shell
+   script); the workspace stays **189/189** GREEN, fmt/clippy GREEN.
+   What W20 deliberately did NOT do: no STATUS.md rewrite (§6 rule),
+   no tag/CHANGELOG/release pipeline (W21 decision), no CI SIGILL
+   change (tracked), no clip_assets binding change (RW-NOTE-1 tracked
+   until the multi-source/binding model lands).
 
 ## WAVE 19 deltas (2026-09-30) — performance (export decode-session budget, ADR-023)
 
@@ -886,8 +938,12 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 20 — docs/release (wave plan: 19 perf ✓, 20 docs/release, 21
-production audit). WAVE GATE (REALWORLD_VALIDATION §8 — binding, the
+WAVE 21 — production audit (wave plan: 19 perf ✓ → 20 docs/release ✓ →
+21 production audit). Scope per the directive's production-readiness
+conversation: distribution strategy for codec-dependent artifacts
+(README-deferred decision), release/versioning posture (no machinery
+was invented in W20 — this is the wave that decides), plus the audit's
+standing gates. WAVE GATE (REALWORLD_VALIDATION §8 — binding, the
 certification loop): every wave re-runs the real-world proof on the SAME
 source — every existing PASS row stays green, the new capability is
 exercised on real media, output is verified independently, and wave +
