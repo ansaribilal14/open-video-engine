@@ -115,6 +115,23 @@ span 160 output frames = 160160 ticks = 6.673333 s):
 | stream-copy export of H.264 | NOT YET IMPLEMENTED — typed rejection pinned (v1 = mpeg4/aac, ADR-015) |
 | GPU parity on this media | N/A this wave (engine wiring is a platform-wave item; parity suite is corpus-level) |
 
+### Wave-RLW-2 (W17 plugin tier) results (2026-09-30)
+
+Scope: identical scope-of-proof wording as above — a verified EDITED
+SEGMENT (here 80 frames = 3.336667 s), never a full-source pass-through.
+
+| Check | Result |
+|---|---|
+| permanent proof re-run on the SAME source (sha256 gate `2d315daf…705f`) | PASS — every Wave-RLW-1 row above stayed green |
+| plugin tier on real media (ADR-021): manifest → context → proposal applied | PASS — stub split proposal applied through the SAME command bus; receipt `realworld_plugin_receipt.json` |
+| state-hash advance + receipt determinism | PASS (receipts byte-identical across runs) |
+| render-invariance of the structural split | PASS — spot renders byte-identical pre/post at t=0.25 s and t=2 s |
+| sample-exact audio across the plugin edit | PASS — audio duration == 147,147/44100 exactly |
+| export of the plugin-edited project | PASS — 80 frames, video duration 80080/24000 exact |
+| independent output decode | PASS — ffprobe: 80 frames, 24000/1001, container 3.336667 s, clean `-xerror` decode |
+| visual sanity (plugin export frames at the invariance points) | PASS — real launch-site footage, exact geometry, no corruption |
+| finding (pinned, not a defect) | undo of a plugin-applied Split restores structure but not the pre-command hash — id-state is document state (ADR-016/E-012); redo identity exact |
+
 ## 6. Real defects found by real media (the point of this workflow)
 
 | ID | Defect | Fix | Pin |
@@ -146,6 +163,7 @@ source). Assertion in the realworld test documents the current count.
 | WAV/PCM export (sample-exact) | IMPLEMENTED, TESTED, EXERCISED |
 | Project persistence, kill-safe logs, reopen replay | IMPLEMENTED, TESTED, EXERCISED |
 | Deterministic re-export | IMPLEMENTED, TESTED, EXERCISED |
+| Plugin tier (process plugins proposing commands, ADR-021) | IMPLEMENTED, TESTED, EXERCISED (real media, wave-RLW-2) |
 | CLI / batch / MCP / Rhai clients | IMPLEMENTED, TESTED (corpus-level) — not exercised by this test yet |
 | Stream-copy export of H.264 sources | NOT YET IMPLEMENTED — typed rejection (pinned) |
 | Multi-track audio mixing, audio retime | NOT YET IMPLEMENTED (ADR-018 gaps) |

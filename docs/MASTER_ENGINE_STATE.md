@@ -4,9 +4,56 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 16 COMPLETE + REALWORLD VALIDATION WAVE (RLW-1) COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting — all landed; RLW-1 = real-world reference media proof wired in permanently)
+WAVE: 17 COMPLETE + REALWORLD VALIDATION WAVE (RLW-1) COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins — all landed; RLW-1 = real-world reference media proof wired in permanently)
 DATE: 2026-09-30
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = this PR
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = this PR
+
+## WAVE 17 deltas (2026-09-30) — plugin tier (process plugins, ADR-021)
+
+1. **ove-plugin (new workspace member)**: the directive's "typed plugin
+   client at the same command-bus boundary" — 28_PLUGINS §7 Tier C lands
+   first (Tier A/B stay future; the research marks WASM unverified at
+   §11). Line-delimited JSON protocol v1 over the plugin process stdio:
+   manifest (required first) → hello; host-pushed read-only context (state
+   hash, tick axis, per-track clip windows, exact-rational strings);
+   proposals; per-proposal `proposal_result` receipts; log relay; done.
+   The ONLY write path is a proposal in the SAME typed grammar the other
+   clients use, applied through the SAME engine surface — the plugin
+   boundary adds zero new engine semantics (ADR-021).
+2. **Boundary law enforced in code**: plugins never touch frames, the
+   filesystem, the project uuid, or the clock (context = document state
+   only, batch-`status` parity); ME-7 at the plugin edge (a JSON number in
+   a rational field is rejected in-band, never coerced); default-DENY
+   capabilities (host v1 knows only `propose.timeline`; unknown capability
+   names abort the manifest); protocol violations abort typed (non-JSON,
+   unknown type, manifest ordering/duplicates, version mismatch, EOF
+   before done); payload problems reject in-band and the session continues
+   (mirrors the MCP split).
+3. **Receipts are deterministic evidence (28_PLUGINS §10)**: every proposal
+   receipted (id, verb, applied/error, state hash after); report carries
+   plugin name+version, NO timestamps — same project + same behavior →
+   byte-identical receipts (pinned by test).
+4. **Reference plugin `ove-plugin-stub`**: deterministic; derives one
+   content-neutral structural proposal (split first clip of lowest track
+   at half duration) from the context; doubles as the real-media gate
+   instrument.
+5. **W17 REAL-WORLD GATE PASSED (certification loop,
+   REALWORLD_VALIDATION §5 W17 rows)**: permanent proof re-run on the
+   SAME source (sha256 identity gate 2d315daf…705f) — every existing PASS
+   row green; NEW gate `ove-plugin/tests/realworld_gate.rs` exercises the
+   plugin tier on the real NASA media: manifest → context → split applied
+   → receipt → state-hash advance → RENDER-INVARIANCE (spot renders
+   byte-identical pre/post) → sample-exact audio across the split →
+   export 80 frames with video/audio durations EXACT → independent
+   ffprobe verification (80 frames, 24000/1001, clean -xerror decode,
+   3.336667 s container) → visual inspection PASS (real launch-site
+   footage, no corruption).
+6. **Finding pinned**: undoing a plugin-applied Split restores the clip
+   structure but never the pre-command hash — id-state is document state
+   (ADR-016/E-012); redo identity is exact. (The RLW-1 undo identity held
+   because SetKeyframes consumes no allocation.)
+7. Workspace **171/171** GREEN (+6 plugin conformance); fmt GREEN; clippy
+   GREEN (workspace, all targets).
 
 ## REALWORLD VALIDATION WAVE (RLW-1) deltas (2026-09-30) — includes THREE REAL engine bug fixes
 
@@ -684,6 +731,17 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
   curve families beyond Linear/Hold; animatable properties outside the
   placement inputs; audio keyframing; speed≠1 keyframe time mapping
   (rides the retime verb, ADR-013).
+- ADR-021 (2026-09-30): plugin tier v1 — process plugins as typed
+  command-bus clients (28_PLUGINS §7 Tier C; Tier A/B future). Protocol
+  v1 line-JSON over stdio (manifest→hello / host-pushed read-only
+  context / proposals / receipts / log / done); the ONLY write path is a
+  proposal in the SAME typed grammar (no import_media — filesystem
+  grant), applied through the SAME engine surface; default-DENY
+  capabilities; ME-7 at the plugin edge; protocol violations abort
+  typed, payload problems reject in-band; deterministic no-timestamp
+  receipts. Confidence 0.9. Reopen: user-approval ladder step; Tier B
+  WASM prototype; capability grants + permission broker;
+  distribution/signing; protocol N-1 policy.
 
 ## Unresolved decisions (registry)
 
@@ -700,17 +758,14 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 17 — plugins: the plugin-tier research (28_PLUGINS) becomes a
-typed plugin client at the same command-bus boundary (process/WASM
-tier behind the same Engine surface; no new semantics outside the
-command grammar). WAVE GATE (REALWORLD_VALIDATION §8 — binding, the
-certification loop): after landing, re-run the real-world proof on
-the SAME source — every existing PASS row stays green, the new
-plugin capability is exercised on real media, output is verified
-independently, and wave + commit + hash are recorded. Completion
-statement required: "Wn implemented, existing real-media
-certification still passes, new capability exercised on real media,
-output independently verified" — an "implemented, N tests pass"
-statement is NOT wave completion. Then 18 security, 19 perf,
-20 docs/release, 21 production audit. Land via PR with fmt/clippy/
+WAVE 18 — security hardening (wave plan: 18 security, 19 perf,
+20 docs/release, 21 production audit). WAVE GATE
+(REALWORLD_VALIDATION §8 — binding, the certification loop): every
+wave re-runs the real-world proof on the SAME source — every existing
+PASS row stays green, the new capability is exercised on real media,
+output is verified independently, and wave + commit + hash are
+recorded. Completion statement required: "Wn implemented, existing
+real-media certification still passes, new capability exercised on
+real media, output independently verified" — an "implemented, N tests
+pass" statement is NOT wave completion. Land via PR with fmt/clippy/
 tests green and this file updated.
