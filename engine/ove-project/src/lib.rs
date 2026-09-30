@@ -209,6 +209,11 @@ impl Project {
                         m.state_hash
                     )));
                 }
+                // RLW-7 (RW-NOTE-1 closure): the mirror is the binding
+                // authority across compaction — suffix replay only ever
+                // APPENDS onto the snapshotted map (entries folded into the
+                // snapshot are not replayed again).
+                clip_assets = mirror.clip_assets.clone();
                 mirror
                     .to_timeline()
                     .map_err(ProjectError::SnapshotInvalid)?
@@ -272,7 +277,13 @@ impl Project {
 
         // reconcile the hint: if the log outran the manifest (crash between
         // append and manifest rewrite), the TRUE state is the replayed one.
-        let state_hash = state::StateMirror::from_timeline(&timeline).state_hash();
+        // RLW-7: the hash covers the REBUILT binding map (same shape
+        // touch_manifest and snapshot() use) so a manifest rewritten here
+        // stays consistent with every later write instead of drifting to a
+        // binding-free value.
+        let mut state_mirror = state::StateMirror::from_timeline(&timeline);
+        state_mirror.clip_assets = clip_assets.clone();
+        let state_hash = state_mirror.state_hash();
         let log_len = snapshot_seq + loaded_entries;
         if manifest.state.log_len != log_len || manifest.state.state_hash != state_hash {
             manifest.state.snapshot_seq = snapshot_seq;
@@ -749,14 +760,30 @@ fn matches_seqs(a: u64, b: u64) -> bool {
 
 /// Binding bookkeeping for one entry (used by execute AND replay so both
 /// paths maintain the map identically).
+///
+/// RLW-7 (RW-NOTE-1 closure): a Split's right half now consumes the SAME
+/// asset binding as the clip it was split from — the Split payload carries
+/// both ids, so execute and replay derive the identical map. An asset-free
+/// split adds nothing (mirrors `Insert { asset: None }`). Undo/redo never
+/// mutates the map: the inverse of a Split is `Batch[Remove, Resize]` (no
+/// binding payload), and bindings are permanent for the log's lifetime
+/// (v1 rule since W6). The snapshot mirror carries the map across
+/// compaction, so suffix replay only ever appends onto it.
 fn record_entry_bindings(map: &mut BTreeMap<u64, String>, entry: &LogEntry) {
-    if let LogPayload::Insert {
-        clip,
-        asset: Some(hash),
-        ..
-    } = &entry.payload
-    {
-        map.insert(clip.id, hash.clone());
+    match &entry.payload {
+        LogPayload::Insert {
+            clip,
+            asset: Some(hash),
+            ..
+        } => {
+            map.insert(clip.id, hash.clone());
+        }
+        LogPayload::Split { id, new_id, .. } => {
+            if let Some(hash) = map.get(id) {
+                map.insert(*new_id, hash.clone());
+            }
+        }
+        _ => {}
     }
 }
 
