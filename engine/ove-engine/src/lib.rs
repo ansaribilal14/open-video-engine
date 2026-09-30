@@ -428,21 +428,47 @@ impl Engine {
 
     /// Render one output frame at timeline time `t` (exact): decode at the
     /// mapped source pts → RGBA boundary conversion → compile → execute.
+    ///
+    /// One-shot convenience path: builds a fresh decode-source map (fresh
+    /// decoder sessions) for this single frame. Export loops must NOT call
+    /// this per frame — use `export_reencode`, which builds the source map
+    /// ONCE and keeps the sessions alive for the whole span (ADR-023).
     pub fn render_frame(
         &mut self,
+        output: &ove_render::OutputSpec,
+        t: Rational,
+    ) -> Result<FrameEnvelope, EngineError> {
+        let sources = self.build_decode_sources();
+        self.render_frame_with(&sources, output, t)
+    }
+
+    /// The decode-source map for the CURRENT imported sources (one
+    /// `DecodeSource` per distinct content hash). Owned data — the map can
+    /// outlive a single borrow of the engine and live for a whole export.
+    fn build_decode_sources(&self) -> std::collections::HashMap<u64, DecodeSource> {
+        let mut sources: std::collections::HashMap<u64, DecodeSource> =
+            std::collections::HashMap::new();
+        for (hex, media) in &self.sources {
+            let sid = source_id_of(hex);
+            sources.insert(sid, DecodeSource::new(self.project.dir(), media));
+        }
+        sources
+    }
+
+    /// Render one output frame through a CALLER-OWNED decode-source map.
+    /// The map's decoder sessions persist across calls: sequential targets
+    /// on the same source reuse the decoder cursor (REALWORLD-BUG-3
+    /// discipline) instead of re-opening + re-seeking + re-decoding the
+    /// keyframe→target span for every output frame (ADR-023 session budget).
+    fn render_frame_with(
+        &self,
+        sources: &std::collections::HashMap<u64, DecodeSource>,
         output: &ove_render::OutputSpec,
         t: Rational,
     ) -> Result<FrameEnvelope, EngineError> {
         let input = self.build_render_input(output, t)?;
         let plan =
             compile_frame(&input, frame_index_of(output, t)).map_err(EngineError::Compile)?;
-        // FrameSource: decode-on-demand per placement source
-        let mut sources: std::collections::HashMap<u64, DecodeSource<'_>> =
-            std::collections::HashMap::new();
-        for (hex, media) in &self.sources {
-            let sid = source_id_of(hex);
-            sources.insert(sid, DecodeSource::new(self.project.dir(), media));
-        }
         let refs: std::collections::HashMap<u64, &dyn FrameSource> = sources
             .iter()
             .map(|(k, v)| (*k, v as &dyn FrameSource))
@@ -478,9 +504,15 @@ impl Engine {
         };
         let mut enc = FfmpegSwEncoder::configure(cfg).map_err(EngineError::Encode)?;
         let track = enc.track_spec().map_err(EngineError::Encode)?;
+        // ADR-023 session budget: the decode-source map (and its decoder
+        // sessions) is built ONCE for the whole export — sequential targets
+        // reuse the decoder cursor; no per-frame re-open / re-seek / GOP
+        // re-decode. Owned data, so the map carries no borrow of `self`
+        // across the loop.
+        let sources = self.build_decode_sources();
         for k in 0..n_frames {
             let t = output.frame_pts(k);
-            let mut frame = self.render_frame(output, t)?;
+            let mut frame = self.render_frame_with(&sources, output, t)?;
             frame.pts = t;
             frame.duration = Rational::new(output.rate_den, output.rate_num);
             enc.feed(frame).map_err(EngineError::Encode)?;
@@ -964,20 +996,49 @@ fn eval_geometry(
 // Decode source — the FrameSource adapter (decode → RGBA boundary conversion)
 // ---------------------------------------------------------------------------
 
+/// W19 perf instrument (deterministic, never wall-clock): cumulative count
+/// of decoder opens performed by the engine's render/export paths. The
+/// export session budget (ADR-023) is ONE open per distinct source per
+/// export — pinned by `ove-engine/tests/export_session_budget.rs`. A count
+/// that grows with OUTPUT FRAMES means a session is being rebuilt per frame
+/// (the pre-W19 defect shape: open + keyframe re-seek + GOP re-decode for
+/// every exported frame).
+static DECODER_OPENS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Read the W19 decoder-open counter (test/conformance instrument).
+pub fn decoder_opens() -> u64 {
+    DECODER_OPENS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Reset the W19 decoder-open counter (test/conformance instrument).
+pub fn reset_decoder_opens() {
+    DECODER_OPENS.store(0, std::sync::atomic::Ordering::SeqCst);
+}
+
 /// One decode-backed source. Interior mutability = the decoder session +
 /// its seek/decode cursor; single-writer (v1), so RefCell is sound here.
-struct DecodeSource<'a> {
-    dir: &'a Path,
-    media: &'a SourceMedia,
+///
+/// W19 (ADR-023): the source OWNS its data (cloned `SourceMedia`, owned
+/// dir path) so an export can build the source map ONCE and keep the
+/// decode sessions alive across the whole frame loop — the map carries no
+/// borrow of the engine.
+struct DecodeSource {
+    dir: std::path::PathBuf,
+    media: SourceMedia,
     session: std::cell::RefCell<Option<VideoSession>>,
 }
 
 /// The live decode cursor for one source: where the decoder is landed (the
 /// keyframe floor of the last seek) and the pts of the last floor delivered.
+/// `pending` is the W19 cursor-reuse pushback: the first decoded frame that
+/// ran PAST the last fetch's target — decoded, but not consumed as a floor.
+/// The next sequential fetch consumes it as its floor candidate instead of
+/// re-seeking and re-decoding the whole keyframe→target span (ADR-023).
 struct VideoSession {
     dec: FfmpegSwDecoder,
     landed: Rational,
     last_floor_pts: Rational,
+    pending: Option<FrameEnvelope>,
 }
 
 /// Greatest keyframe pts <= target (the ADR-013 landing discipline); the
@@ -997,16 +1058,17 @@ fn keyframe_floor_of(media: &SourceMedia, target: Rational) -> Rational {
         .unwrap_or_else(|| Rational::zero(1))
 }
 
-impl<'a> DecodeSource<'a> {
-    fn new(dir: &'a Path, media: &'a SourceMedia) -> Self {
+impl DecodeSource {
+    fn new(dir: &Path, media: &SourceMedia) -> Self {
         DecodeSource {
-            dir,
-            media,
+            dir: dir.to_path_buf(),
+            media: media.clone(),
             session: std::cell::RefCell::new(None),
         }
     }
 
     fn open_decoder(&self) -> Result<FfmpegSwDecoder, EngineError> {
+        DECODER_OPENS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let hex = self.media.hash.hex();
         let asset_path = self.dir.join(format!("assets/{hex}/src.mp4"));
         let asset =
@@ -1023,7 +1085,7 @@ impl<'a> DecodeSource<'a> {
     }
 }
 
-impl FrameSource for DecodeSource<'_> {
+impl FrameSource for DecodeSource {
     /// The D-5 floor rule: return the frame with the GREATEST pts ≤ target
     /// (exact hits are the common CFR case; multi-rate sources floor).
     ///
@@ -1038,8 +1100,20 @@ impl FrameSource for DecodeSource<'_> {
     /// ≤ target, then decode FORWARD keeping the last frame ≤ target.
     /// Sequential same-GOP targets reuse the decoder position; a target
     /// at/before the last delivered floor re-seeks (backward jumps).
+    ///
+    /// W19 (REALWORLD-BUG-4, exposed by the export session budget): the
+    /// session now SURVIVES across export frames, so the frame decoded past
+    /// the target must be KEPT — the previous loop popped and discarded it,
+    /// and the next sequential fetch (whose target is exactly that frame's
+    /// pts under CFR) decoded PAST it and returned None. The defect was
+    /// invisible pre-W19 because per-frame session rebuilds re-seeked every
+    /// fetch. One pending frame is cached in the session (bounded memory);
+    /// a target that falls BETWEEN the last floor and the pending frame
+    /// (VFR / multi-rate gaps) falls back to the re-seek rebuild — the D-5
+    /// floor rule stays total. The YUV→RGBA conversion now runs ONCE, on
+    /// the final floor frame, not on every intermediate decoded frame.
     fn fetch(&self, target: Rational) -> Option<FrameEnvelope> {
-        let land = keyframe_floor_of(self.media, target);
+        let land = keyframe_floor_of(&self.media, target);
         let mut session = self.session.borrow_mut();
         if session.is_none() {
             let dec = self.open_decoder().ok()?;
@@ -1047,31 +1121,49 @@ impl FrameSource for DecodeSource<'_> {
                 dec,
                 landed: Rational::new(-1, 1),
                 last_floor_pts: Rational::new(-1, 1),
+                pending: None,
             });
         }
         let s = session.as_mut().expect("just set");
-        if s.landed != land || target <= s.last_floor_pts {
+        let pending_beyond_target = s.pending.as_ref().is_some_and(|p| p.pts > target);
+        if s.landed != land || target <= s.last_floor_pts || pending_beyond_target {
             s.dec.seek(land, SeekMode::Exact).ok()?;
             s.landed = land;
+            s.pending = None;
         }
-        let mut floor: Option<FrameEnvelope> = None;
-        // A decode error or EOF after a floor exists still returns the floor:
-        // real edits can end on the source's last frame.
-        while let Ok(Some(frame)) = s.dec.next() {
-            if frame.pts > target {
-                // decoded past the target: the last frame ≤ target
-                // is the floor (D-5); None only when the target
-                // precedes the first frame — the honest empty answer.
-                break;
+        // Decode forward keeping the LAST raw frame ≤ target as the running
+        // floor; the first frame > target is cached as `pending` (not
+        // discarded) for the next fetch. Conversion to RGBA happens ONCE,
+        // after the loop, on the final floor frame.
+        let mut floor_raw: Option<FrameEnvelope> = None;
+        loop {
+            if floor_raw.is_none() {
+                if let Some(p) = s.pending.take() {
+                    // p.pts ≤ target here: the re-seek above cleared any
+                    // pending that ran beyond this target.
+                    s.last_floor_pts = p.pts;
+                    floor_raw = Some(p);
+                    continue;
+                }
             }
-            // pts ≤ target: keep it as the running floor; convert
-            // at the engine boundary (the single declared swap).
-            floor = yuv_to_rgba(&frame);
+            // A decode error or EOF after a floor exists still returns the
+            // floor: real edits can end on the source's last frame.
+            match s.dec.next() {
+                Ok(Some(frame)) => {
+                    if frame.pts > target {
+                        // decoded past the target: cache it — the next
+                        // sequential fetch's floor candidate (D-5); None
+                        // only when the target precedes the first frame.
+                        s.pending = Some(frame);
+                        break;
+                    }
+                    s.last_floor_pts = frame.pts;
+                    floor_raw = Some(frame);
+                }
+                _ => break,
+            }
         }
-        if let Some(f) = &floor {
-            s.last_floor_pts = f.pts;
-        }
-        floor
+        floor_raw.as_ref().and_then(yuv_to_rgba)
     }
 }
 
