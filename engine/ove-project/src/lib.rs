@@ -44,6 +44,11 @@ use state::NumPair;
 // Errors (typed; the log is the project — corruption is a hard stop)
 // ---------------------------------------------------------------------------
 
+/// ADR-022: snapshot state files are shared artifacts — bounded before
+/// the wholesale read. Legit v1 state files are MB-scale at 20k clips;
+/// 64 MiB is generous headroom.
+pub const STATE_FILE_MAX_BYTES: usize = 64 * 1024 * 1024;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectError {
     Io(String),
@@ -180,6 +185,18 @@ impl Project {
         let mut timeline = match (&meta, snapshot_seq) {
             (Some(m), seq) if seq > 0 => {
                 let state_path = dir.join("snapshot").join(format!("state-{seq}.json"));
+                // ADR-022: shared-artifact size bound BEFORE the wholesale
+                // read (a hostile state file must fail typed, not OOM).
+                let state_len = std::fs::metadata(&state_path)
+                    .map_err(|e| {
+                        ProjectError::SnapshotInvalid(format!("stat state-{seq}.json: {e}"))
+                    })?
+                    .len() as usize;
+                if state_len > STATE_FILE_MAX_BYTES {
+                    return Err(ProjectError::SnapshotInvalid(format!(
+                        "state file too large: {state_len} > {STATE_FILE_MAX_BYTES} bytes"
+                    )));
+                }
                 let raw = std::fs::read_to_string(&state_path).map_err(|e| {
                     ProjectError::SnapshotInvalid(format!("read state-{seq}.json: {e}"))
                 })?;

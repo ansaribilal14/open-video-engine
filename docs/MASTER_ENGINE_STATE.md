@@ -4,9 +4,55 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 17 COMPLETE + REALWORLD VALIDATION WAVE (RLW-1) COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins — all landed; RLW-1 = real-world reference media proof wired in permanently)
+WAVE: 18 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security — all landed; RLW-1/2/3 = real-world certification trail)
 DATE: 2026-09-30
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = this PR
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = this PR
+
+## WAVE 18 deltas (2026-09-30) — security hardening (untrusted-input budgets, ADR-022)
+
+1. **Threat posture made real, not theoretical**: every untrusted-input
+   reader buffered unboundedly before this wave. The conformance probes
+   PROVED the worst one — a 12-line Rhai string-doubling script was
+   **SIGKILLed by the kernel OOM killer** against the pre-fix engine
+   (Rhai defaults leave string/array/map sizes unbounded). The other
+   surfaces (project files, plugin stdout, MCP stdio) had the same
+   unbounded-read shape.
+2. **ADR-022 — declared resource budgets at every client boundary**,
+   enforced at READ time, failing TYPED: manifest 16 MiB + asset-path
+   escape rejection (paths are data, not instructions); log line 8 MiB
+   (take-window loader; quarantine records an oversized line by REASON,
+   never by bytes); snapshot state 64 MiB before the wholesale read;
+   plugin stdout line 1 MiB (read-time take-window + state-machine
+   defense in depth) + 10 000-proposal receipt budget; MCP client line
+   1 MiB → exactly one typed JSON-RPC −32000 error, tail discarded, the
+   server keeps serving; Rhai string/array/map/call-depth/operations
+   caps + 1 MiB `emit` output budget. All caps are named public
+   constants (documented contract) with ≥1000× legitimate-scale headroom.
+3. **Plugin launch law**: `PluginHost::spawn_with_args` — direct exec,
+   arguments verbatim, NO shell anywhere in the host.
+4. **Hostile-peer conformance instruments committed**: `ove-plugin-flood`
+   (2 MiB line before any manifest / valid manifest + 11 000 default-DENY
+   proposals with balanced reply draining — no host deadlock mid-attack);
+   14 security tests (pure state machine + real wire + project files +
+   scripts + MCP server) — the pre-fix tree failed ALL of them (including
+   the OOM kill), the post-fix tree is 185/185 GREEN.
+5. **W18 REAL-WORLD SECURITY GATE PASSED (certification loop,
+   REALWORLD_VALIDATION §5 RLW-3 rows)**: hostile proposal-flood against
+   a session holding the REAL NASA media → typed budget abort, state
+   hash byte-unchanged, spot renders byte-identical → the legit plugin
+   still applies its split through the SAME command bus → render
+   invariance → exact 80-frame export → independent ffprobe (80 frames,
+   24000/1001, 3.336667 s) → export sha256 `ff5e67f8…` IDENTICAL across
+   two independent builds (determinism survives hardening) →
+   deterministic record `realworld_record_security.json` (commit
+   `85259f1a0f14`). The RLW-1 permanent proof AND the W17 plugin gate
+   re-ran green on the hardened build (129.6 s / 35.2 s).
+6. **SECURITY.md** (repo root): surface table, private disclosure path
+   (GitHub security advisories), hardening posture, honest limits
+   (decoder pixel-bomb + plugin log-flood CPU are NAMED residuals, not
+   hidden).
+7. Workspace **185/185** GREEN (14 new security conformance); fmt GREEN;
+   clippy GREEN (workspace, all targets).
 
 ## WAVE 17 deltas (2026-09-30) — plugin tier (process plugins, ADR-021)
 
@@ -644,11 +690,25 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 0 audit ✓ → 0.5 SIGILL ✓ → 0.6 reconcile ✓ → 1 seam ✓ → 2 render ✓ →
 3 encode+mux+export ✓ → 4 project ✓ → 5 engine+cli ✓ → 6 vertical slice ✓ →
 7 audio ✓ → 8 keyframes ✓ → 9 GPU ✓ → 10–12 platform-leg evidence ✓ →
-13 conformance ✓ → 14 headless ✓ → 15 AI/MCP ✓ → 16 scripting → 17 plugins →
-18 security → 19 perf → 20 docs/release → 21 production audit.
+13 conformance ✓ → 14 headless ✓ → 15 AI/MCP ✓ → 16 scripting ✓ →
+17 plugins ✓ → 18 security ✓ → 19 perf → 20 docs/release → 21 production audit.
 
 ## Resolved decisions (registry)
 
+- ADR-022 (2026-09-30): security hardening v1 — declared untrusted-input
+  resource budgets at every client boundary (project files, plugin
+  stdio, MCP stdio, Rhai scripts), enforced at READ time via take-window
+  bounded reads, failing TYPED with the budget named; project asset
+  paths validated as data (relative, no traversal); plugin launch =
+  direct exec, no shell; hostile-peer conformance instruments committed
+  (ove-plugin-flood); caps are named public constants with ≥1000×
+  honest-use headroom. Confidence 0.88 (the Rhai OOM-kill repro is
+  converted to a typed error; W18 real-media gate + determinism
+  re-export verified). Reopen: an untrusted path outside the five
+  surfaces; a legit workload exceeding a cap; a Tier-B sandboxing
+  requirement (session wall-clock, log-flood CPU); decoder pixel-bomb
+  caps ride the difficult-corpus decode-hardening leg; Windows path
+  semantics ride the first Windows platform leg.
 - ADR-020 (2026-09-29): GPU reference executor v1 — ove-render::gpu behind
   feature `gpu` (wgpu 25), Rgba8Uint + u32 integer blend identical to
   software, `@builtin(position)` coordinates, native-size fetch surfaces /
@@ -758,14 +818,13 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 ## Explicit next action
 
-WAVE 18 — security hardening (wave plan: 18 security, 19 perf,
-20 docs/release, 21 production audit). WAVE GATE
-(REALWORLD_VALIDATION §8 — binding, the certification loop): every
-wave re-runs the real-world proof on the SAME source — every existing
-PASS row stays green, the new capability is exercised on real media,
-output is verified independently, and wave + commit + hash are
+WAVE 19 — performance (wave plan: 19 perf, 20 docs/release, 21 production
+audit). WAVE GATE (REALWORLD_VALIDATION §8 — binding, the certification
+loop): every wave re-runs the real-world proof on the SAME source — every
+existing PASS row stays green, the new capability is exercised on real
+media, output is verified independently, and wave + commit + hash are
 recorded. Completion statement required: "Wn implemented, existing
-real-media certification still passes, new capability exercised on
-real media, output independently verified" — an "implemented, N tests
-pass" statement is NOT wave completion. Land via PR with fmt/clippy/
+real-media certification still passes, new capability exercised on real
+media, output independently verified" — an "implemented, N tests pass"
+statement is NOT wave completion. Land via PR with fmt/clippy/
 tests green and this file updated.

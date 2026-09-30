@@ -331,6 +331,43 @@ impl LogWriter {
     }
 }
 
+/// ADR-022: the log is a shared artifact — a hostile line must fail the
+/// load TYPED instead of being buffered whole (OOM). Each line is read
+/// through a `take(LOG_LINE_MAX_BYTES + 1)` window: a line whose first
+/// read crosses the cap aborts before the rest is ever consumed.
+pub const LOG_LINE_MAX_BYTES: usize = 8 * 1024 * 1024;
+
+/// Bounded line iterator: yields `Ok(line)` / `Err(reason)` per line —
+/// the CALLER owns the line number (enumerate) and the typed wrapping.
+fn bounded_lines(
+    mut reader: BufReader<std::fs::File>,
+) -> impl Iterator<Item = Result<String, String>> {
+    use std::io::Read;
+    std::iter::from_fn(move || {
+        let mut buf = Vec::new();
+        let n = match reader
+            .by_ref()
+            .take((LOG_LINE_MAX_BYTES + 2) as u64)
+            .read_until(b'\n', &mut buf)
+        {
+            Ok(n) => n,
+            Err(e) => return Some(Err(format!("io: {e}"))),
+        };
+        if n == 0 {
+            return None; // EOF
+        }
+        if n > LOG_LINE_MAX_BYTES + 1 {
+            return Some(Err(format!(
+                "line too large: {n} > {LOG_LINE_MAX_BYTES} bytes"
+            )));
+        }
+        let s = String::from_utf8_lossy(&buf)
+            .trim_end_matches(['\n', '\r'])
+            .to_string();
+        Some(Ok(s))
+    })
+}
+
 /// Read every entry; the FIRST invalid/torn line aborts with the typed
 /// corruption error (never silent truncation).
 ///
@@ -342,9 +379,12 @@ pub fn load(path: &Path, expected_first: u64) -> Result<Vec<LogEntry>, ProjectEr
     let f = std::fs::File::open(path).map_err(|e| ProjectError::Io(format!("open log: {e}")))?;
     let reader = BufReader::new(f);
     let mut out: Vec<LogEntry> = Vec::new();
-    for (idx, line) in reader.lines().enumerate() {
+    for (idx, line) in bounded_lines(reader).enumerate() {
         let line_no = idx + 1;
-        let line = line.map_err(|e| ProjectError::Io(format!("read log line {line_no}: {e}")))?;
+        let line = match line {
+            Ok(l) => l,
+            Err(reason) => return Err(ProjectError::LogCorruption { line_no, reason }),
+        };
         if line.trim().is_empty() {
             continue;
         }
@@ -375,7 +415,7 @@ pub fn quarantine_and_split(path: &Path) -> Result<(Vec<LogEntry>, String), Proj
     let reader = BufReader::new(f);
     let mut good: Vec<LogEntry> = Vec::new();
     let mut torn: Vec<String> = Vec::new();
-    for (idx, line) in reader.lines().enumerate() {
+    for (idx, line) in bounded_lines(reader).enumerate() {
         let line_no = idx + 1;
         match line {
             Ok(l) if torn.is_empty() => match serde_json::from_str::<LogEntry>(&l) {
@@ -389,7 +429,9 @@ pub fn quarantine_and_split(path: &Path) -> Result<(Vec<LogEntry>, String), Proj
                 }
             },
             Ok(l) => torn.push(format!("LINE {line_no}: quarantined tail: {l}")),
-            Err(e) => torn.push(format!("LINE {line_no}: io: {e}")),
+            // ADR-022: an oversized line is quarantined by REASON only
+            // (its bytes are never stored — the quarantine stays bounded).
+            Err(reason) => torn.push(format!("LINE {line_no}: {reason}")),
         }
     }
     let stamp = std::time::SystemTime::now()

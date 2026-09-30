@@ -132,6 +132,26 @@ SEGMENT (here 80 frames = 3.336667 s), never a full-source pass-through.
 | visual sanity (plugin export frames at the invariance points) | PASS — real launch-site footage, exact geometry, no corruption |
 | finding (pinned, not a defect) | undo of a plugin-applied Split restores structure but not the pre-command hash — id-state is document state (ADR-016/E-012); redo identity exact |
 
+### Wave-RLW-3 (W18 security hardening) results (2026-09-30)
+
+Scope: identical scope-of-proof wording as above — a verified EDITED
+SEGMENT (80 frames = 3.336667 s), never a full-source pass-through. New
+capability under certification: the ADR-022 untrusted-input resource
+budgets, exercised ON the real reference media
+(`ove-plugin/tests/realworld_security.rs`, env-gated; record
+`realworld_record_security.json`, commit `85259f1a0f14`).
+
+| Check | Result |
+|---|---|
+| permanent proof re-run on the SAME source (sha256 gate `2d315daf…705f`) | PASS — every Wave-RLW-1/RLW-2 row above stayed green on the hardened build (RLW-1 full proof 129.6 s run incl. save/kill/reopen/deterministic re-export) |
+| W17 plugin gate re-run (existing certification) | PASS — plugin tier on real media unchanged (35.2 s run) |
+| hostile plugin proposal-flood (11k default-DENY proposals) against the real-media session | PASS — typed budget abort (`proposal budget exhausted: more than 10000…`), state hash byte-unchanged, spot renders byte-identical |
+| legit plugin still applies its edit after the hostile abort | PASS — split applied through the SAME command bus, receipt, hash advance |
+| render invariance (structural split on real media) | PASS — t=0.25 s / t=2 s byte-identical pre/post |
+| export of the post-attack post-edit project | PASS — 80 frames, video duration 80080/24000 exact; export sha256 `ff5e67f8…` IDENTICAL across two independent builds (determinism survives the hardening) |
+| independent output decode | PASS — ffprobe: 80 frames, 24000/1001, container 3.336667 s |
+| deterministic record (wave + commit + hash) | PASS — `realworld_record_security.json` with hostile-flood evidence (abort, unchanged-hash), legit-plugin receipt, export sha256 |
+
 ## 6. Real defects found by real media (the point of this workflow)
 
 | ID | Defect | Fix | Pin |
@@ -234,6 +254,18 @@ cargo test -p ove-engine --release --test realworld
 
 # 4. independent output verification + visual frames
 scripts/realworld/verify_output.py /tmp/rlw/proof <source.mp4>
+
+# 5. W17 plugin-tier gate (certification loop leg)
+OVE_REALWORLD_SOURCE=/tmp/rlw/source/source.mp4 \
+OVE_REALWORLD_EXPECT=baseline_facts.json \
+OVE_REALWORLD_OUT=/tmp/rlw/proof \
+cargo test -p ove-plugin --release --test realworld_gate
+
+# 6. W18 security gate — hostile flood + legit edit on the real media
+OVE_REALWORLD_SOURCE=/tmp/rlw/source/source.mp4 \
+OVE_REALWORLD_EXPECT=baseline_facts.json \
+OVE_REALWORLD_OUT=/tmp/rlw/proof \
+cargo test -p ove-plugin --release --test realworld_security
 ```
 
 Environment notes (2026-09-29): datacenter IPs are hard-blocked by YouTube

@@ -12,6 +12,11 @@ use crate::ProjectError;
 pub const SCHEMA_VERSION: u32 = 1;
 pub const FORMAT_TAG: &str = "ove/project";
 
+/// ADR-022: the manifest is a shared artifact — its file size is bounded
+/// before any parse (a hostile 10 GiB manifest must fail typed, not OOM).
+/// Legit manifests are KB-scale; 16 MiB is ~1000× headroom.
+pub const MANIFEST_MAX_BYTES: usize = 16 * 1024 * 1024;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatedBy {
     pub engine: String,
@@ -91,10 +96,24 @@ impl Manifest {
     }
 
     pub fn load(path: &std::path::Path) -> Result<Manifest, ProjectError> {
+        let len = std::fs::metadata(path)
+            .map_err(|e| ProjectError::Io(format!("stat manifest: {e}")))?
+            .len() as usize;
+        if len > MANIFEST_MAX_BYTES {
+            return Err(ProjectError::ManifestInvalid(format!(
+                "manifest too large: {len} > {MANIFEST_MAX_BYTES} bytes"
+            )));
+        }
         let raw = std::fs::read_to_string(path)
             .map_err(|e| ProjectError::Io(format!("read manifest: {e}")))?;
         let m: Manifest = serde_json::from_str(&raw)
             .map_err(|e| ProjectError::ManifestInvalid(format!("schema: {e}")))?;
+        for a in &m.assets {
+            validate_asset_path("path", &a.path)?;
+            if let Some(p) = &a.probe {
+                validate_asset_path("probe", p)?;
+            }
+        }
         if m.format != FORMAT_TAG {
             return Err(ProjectError::ManifestInvalid(format!(
                 "format tag {:?} is not {FORMAT_TAG:?}",
@@ -126,6 +145,19 @@ impl Manifest {
             .map_err(|e| ProjectError::Io(format!("manifest rename: {e}")))?;
         Ok(())
     }
+}
+
+/// ADR-022: manifest registry paths are DATA, not instructions. A shared
+/// (hostile or corrupted) manifest must not direct the engine at files
+/// outside the project folder. Relative + no `..` component.
+fn validate_asset_path(kind: &str, p: &str) -> Result<(), ProjectError> {
+    let path = std::path::Path::new(p);
+    if path.is_absolute() || p.split('/').any(|c| c == "..") {
+        return Err(ProjectError::ManifestInvalid(format!(
+            "asset path escapes project folder ({kind}): {p:?}"
+        )));
+    }
+    Ok(())
 }
 
 /// snapshot/meta.json — the SNAPSHOT AUTHORITY (see ADR-016 authority
