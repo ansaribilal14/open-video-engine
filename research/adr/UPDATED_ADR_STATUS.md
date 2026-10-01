@@ -45,3 +45,30 @@
    generate no ADRs (R-11 CLOSED).
 4. ADR numbering 012+ is reserved as above; ADR-025 (plugins) stays PLANNED and must not
    be written before the slice gate (anti-overbuild).
+
+---
+
+## Addendum (2026-10-02 — final productization; registry state reconciliation)
+
+The table above is the audit-day snapshot (W21 era). Since it was written, the
+following ADRs landed under the certification loop; statuses as committed:
+
+| ADR | Subject | Status |
+|---|---|---|
+| 015 | libav adapter allowlist {ove-decode, ove-encode} + encode/mux gates | ACCEPTED (W3 era; CI-enforced) |
+| 020 | GPU render executor as backend (software stays the reference) | ACCEPTED (W9; lavapipe parity tolerance-0 in CI) |
+| 021 | Plugin capability model (process tier, default-DENY, same grammar) | ACCEPTED (W17) |
+| 022 | Security hardening — declared budgets, typed failures | ACCEPTED (W18; pixel-bomb residual closed by ADR-024-decoder-input-budgets / RLW-9) |
+| 023 | Export decode-session budget (one open per source per export) | ACCEPTED (W19) |
+| 024 | TWO records share this number (see note below) | both ACCEPTED |
+
+**ADR-024 numbering collision (clarification, no renumbering).** Two accepted
+records carry the number 024:
+
+1. `ADR-024-codec-artifact-distribution.md` — codec-artifact distribution
+   strategy v1 (2026-09-30, WAVE 21).
+2. `ADR-024-decoder-input-budgets.md` — decoder input budgets
+   (2026-10-02, RLW-9; closes the ADR-022 "decoder pixel-bomb" residual).
+
+Where ambiguity matters, cite the FILE name, not the number. Future records
+continue from ADR-025. History is never renumbered.
