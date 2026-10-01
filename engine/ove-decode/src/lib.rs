@@ -108,6 +108,12 @@ pub enum DecodeError {
     /// Backend-internal failures that map to no cleaner variant. MUST carry
     /// context; empty Internal strings are a review reject.
     Internal(String),
+    /// The media exceeds the declared decoder input budgets (ADR-024 —
+    /// closes the ADR-022 pixel-bomb residual). Enforced at OPEN, before any
+    /// frame-buffer geometry is computed or allocated; the limits are the
+    /// named public constants below, never magic numbers. This is a media
+    /// property, not a backend capability — hence its own variant.
+    BeyondDeclaredLimits(String),
 }
 
 impl std::fmt::Display for DecodeError {
@@ -119,8 +125,53 @@ impl std::fmt::Display for DecodeError {
             DecodeError::Cancelled => write!(f, "decode cancelled"),
             DecodeError::Io(d) => write!(f, "io: {d}"),
             DecodeError::Internal(d) => write!(f, "internal: {d}"),
+            DecodeError::BeyondDeclaredLimits(d) => {
+                write!(f, "beyond declared decode limits: {d}")
+            }
         }
     }
+}
+
+/// Declared decoder input budgets (ADR-024, RLW-9; closes the ADR-022
+/// "decoder pixel-bomb" residual). These are the SECURITY CONTRACT of the
+/// decode boundary, not tuning knobs:
+///
+///   * every dimension cap and the per-frame pixel cap are enforced BEFORE
+///     any allocation that scales with the declared geometry (probe/import
+///     and decoder open);
+///   * legitimate scale sits far below every cap (the certified corpus tops
+///     out at 1280×720 = 0.92 MP; 8K UHD = 33.2 MP is INSIDE the pixel cap),
+///     so honest use never sees the budgets;
+///   * a hostile header declaring e.g. 40000×40000 (1.6 GP) or 16384×16384
+///     (268 MP) is rejected typed (`BeyondDeclaredLimits`) instead of being
+///     handed to libav's allocator.
+///
+/// What would reopen this decision: a legitimate workload exceeding a cap;
+/// a surface discovered that allocates from untrusted geometry before these
+/// checks run.
+pub const DECODE_MAX_DIM: u32 = 16_384;
+pub const DECODE_MAX_PIXELS: u64 = 33_554_432; // 2^25 — 8K UHD (7680×4320) fits
+
+/// The video-geometry budget check shared by the probe boundary (import) and
+/// the decoder open boundary (defense in depth).
+pub fn check_video_budget(width: u32, height: u32) -> Result<(), DecodeError> {
+    if width == 0 || height == 0 {
+        return Err(DecodeError::BeyondDeclaredLimits(format!(
+            "video stream declares degenerate geometry {width}x{height}"
+        )));
+    }
+    if width > DECODE_MAX_DIM || height > DECODE_MAX_DIM {
+        return Err(DecodeError::BeyondDeclaredLimits(format!(
+            "{width}x{height} exceeds DECODE_MAX_DIM = {DECODE_MAX_DIM} per dimension"
+        )));
+    }
+    let px = width as u64 * height as u64;
+    if px > DECODE_MAX_PIXELS {
+        return Err(DecodeError::BeyondDeclaredLimits(format!(
+            "{width}x{height} = {px} pixels exceeds DECODE_MAX_PIXELS = {DECODE_MAX_PIXELS} per frame"
+        )));
+    }
+    Ok(())
 }
 
 impl std::error::Error for DecodeError {}

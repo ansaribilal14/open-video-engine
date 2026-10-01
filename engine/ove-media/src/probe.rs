@@ -117,14 +117,25 @@ pub struct VfrReport {
 impl VfrReport {
     /// Compute from the exact pts list of a stream. Pure function — testable
     /// without any media backend (D-12: nothing may assume CFR).
+    ///
+    /// REALWORLD-8-F1 (fixed in the F1/F3 fix wave, previously a documented
+    /// defect): the input pts arrive in PACKET (decode) order — B-frame
+    /// reordering makes them non-monotonic, and delta-over-raw-order
+    /// reported ANY B-frame CFR media as VFR with reordering-shaped deltas
+    /// (e.g. long_gop: +1001/6000, −1001/12000 …  vs ffprobe frame-order
+    /// uniform 1001/24000). VFR is a property of PRESENTATION timing, so
+    /// the pts are sorted into presentation order here before the delta
+    /// pass; packet-order input is normalized, never trusted.
     pub fn from_pts(pts: &[Rational]) -> Self {
+        let mut ordered: Vec<Rational> = pts.to_vec();
+        ordered.sort();
         let mut distinct: Vec<Rational> = Vec::new();
         let push = |d: Rational, distinct: &mut Vec<Rational>| {
             if distinct.len() < 16 && !distinct.contains(&d) {
                 distinct.push(d);
             }
         };
-        for pair in pts.windows(2) {
+        for pair in ordered.windows(2) {
             let d = pair[1].sub(pair[0]);
             push(d, &mut distinct);
         }
@@ -145,6 +156,11 @@ pub enum ProbeError {
     Corrupt(String),
     Unsupported(String),
     Io(String),
+    /// The media exceeds the declared decoder input budgets (ADR-024 —
+    /// closes the ADR-022 pixel-bomb residual). Rejected at the probe/import
+    /// boundary BEFORE any frame allocation; the limits are named public
+    /// constants in ove-decode, never magic numbers.
+    BeyondDeclaredLimits(String),
 }
 
 impl std::fmt::Display for ProbeError {
@@ -154,6 +170,9 @@ impl std::fmt::Display for ProbeError {
             ProbeError::Corrupt(d) => write!(f, "corrupt media: {d}"),
             ProbeError::Unsupported(d) => write!(f, "unsupported: {d}"),
             ProbeError::Io(d) => write!(f, "io error: {d}"),
+            ProbeError::BeyondDeclaredLimits(d) => {
+                write!(f, "beyond declared decode limits: {d}")
+            }
         }
     }
 }
@@ -373,5 +392,54 @@ mod tests {
             Rational::new(0, 1)
         );
         assert!(idx.floor(Rational::new(-1, 24)).is_none());
+    }
+
+    // -- RLW-8-F1 fix pins (presentation-order VFR analysis) -----------------
+
+    #[test]
+    fn vfr_packet_order_bframe_cfr_is_not_vfr() {
+        // CFR 24/1 with B-frame reordering: packets arrive I0 P3 B1 B2 P6 B4
+        // B5 … — raw packet-order deltas are reordering-shaped (+3, −2, +1,
+        // +4 …) and the pre-fix detector reported is_vfr=true (RLW-8-F1).
+        // Sorted into presentation order the stream is exactly CFR.
+        let pkt_order: Vec<Rational> = [0i64, 3, 1, 2, 6, 4, 5, 9, 7, 8]
+            .iter()
+            .map(|&n| Rational::new(n, 24))
+            .collect();
+        let r = VfrReport::from_pts(&pkt_order);
+        assert!(!r.is_vfr, "B-frame CFR media must not report VFR");
+        assert!(r.distinct_deltas.is_empty());
+        assert_eq!(r.frame_count, 10);
+    }
+
+    #[test]
+    fn vfr_genuine_vfr_detected_regardless_of_input_order() {
+        // Genuinely uneven presentation timing (15/30/10 fps segments), fed
+        // both pre-sorted and in a scrambled packet order: both must detect.
+        let presentation: Vec<Rational> = [0i64, 66667, 133333, 266667, 333334, 533334]
+            .iter()
+            .map(|&n| Rational::new(n, 1_000_000))
+            .collect();
+        assert!(VfrReport::from_pts(&presentation).is_vfr);
+        let mut scrambled = presentation.clone();
+        scrambled.reverse();
+        assert!(VfrReport::from_pts(&scrambled).is_vfr);
+    }
+
+    #[test]
+    fn vfr_single_frame_and_duplicate_pts_edges() {
+        let one = [Rational::new(0, 1)];
+        let r = VfrReport::from_pts(&one);
+        assert!(!r.is_vfr);
+        assert_eq!(r.frame_count, 1);
+        // duplicate presentation pts = two frames at one instant: genuinely
+        // irregular, reported as VFR with a zero delta (honest signal)
+        let dup = [
+            Rational::new(0, 1),
+            Rational::new(0, 1),
+            Rational::new(1, 24),
+        ];
+        let r = VfrReport::from_pts(&dup);
+        assert!(r.is_vfr);
     }
 }

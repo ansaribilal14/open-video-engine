@@ -197,24 +197,17 @@ fn corpus_scenario(
     // D-12: nothing assumes CFR. VFR truth must agree with the ffprobe
     // frame-delta analysis.
     let probe_vfr = media_info.probe.vfr.as_ref().expect("VFR report built");
-    // VFR comparison — the honest pin. RLW-8 finding **RLW-8-F1**: the
-    // probe-side VfrReport is computed from PACKET-order pts (demux order),
-    // so B-frame reordering makes pts non-monotonic and ANY B-frame CFR
-    // media is reported is_vfr=true with reordering-shaped deltas
-    // (evidence: long_gop deltas [1001/6000, -1001/12000, -1001/24000, …]
-    // vs ffprobe frame-order uniform 1001/24000). The report is an
-    // informational probe surface (scheduling never consumes it — D-12);
-    // the false-positive is typed, deterministic, and does not affect
-    // render/export bytes. Contract pinned HERE: the detector must CATCH
-    // genuinely VFR media (nominal verdict true ⇒ probe true). The
-    // false-positive direction is RECORDED, not asserted — fixing the
-    // detector is a follow-up wave, not an RLW-8 normalization.
-    if baseline.is_vfr_jitter_tolerant {
-        assert!(
-            probe_vfr.is_vfr,
-            "genuinely VFR media must be detected (D-12) — probe missed it"
-        );
-    }
+    // VFR verdict alignment — RLW-8 finding **RLW-8-F1 FIXED** in the F1/F3
+    // fix wave: the detector now sorts packet-order pts into PRESENTATION
+    // order before the delta pass (VFR is a property of presentation
+    // timing), so B-frame CFR media no longer false-positives and the probe
+    // verdict must EQUAL the ffprobe exact verdict in BOTH directions on
+    // every corpus item (pre-fix: all 5 B-frame CFR items reported
+    // is_vfr=true with reordering-shaped deltas).
+    assert_eq!(
+        probe_vfr.is_vfr, baseline.is_vfr,
+        "probe VFR verdict must equal the ffprobe frame-order verdict (F1 fixed)"
+    );
     rec["probe"] = json!({
         "width": vd.width, "height": vd.height,
         "keyframes": kf_index.entries.len(),
@@ -375,6 +368,25 @@ fn corpus_scenario(
         e.render_frame(&output, Rational::new(0, 1)),
     );
     let rm = record_step(&mut rec, "render_mid", e.render_frame(&output, t_mid));
+    // RLW-8 finding **RLW-8-F3 FIXED** in the F1/F3 fix wave: genuinely VFR
+    // media (container-declared zero/no durations) used to typed-fail every
+    // render/export with SourceFrameMissing at verifiably-existing frames
+    // (decoder typed the frames Corrupt("frame without duration")). The fix
+    // delivers a container-declared absence as duration 0/1 — corruption
+    // typing stays for NEGATIVE durations only. The fix is load-bearing
+    // here: the VFR item must now render AND export (no normalization — the
+    // pre-fix typed-failure evidence is preserved in the 10-01/10-02
+    // records and in docs/REALWORLD_VALIDATION.md §10).
+    if baseline.is_vfr_jitter_tolerant {
+        assert!(
+            r0.is_some(),
+            "VFR source must render at t0 (RLW-8-F3 fixed — reorder-safe zero-duration decode)"
+        );
+        assert!(
+            rm.is_some(),
+            "VFR source must render mid-span (RLW-8-F3 fixed)"
+        );
+    }
     if let (Some(f0), Some(fm)) = (&r0, &rm) {
         for (name, f) in [("t0", f0), ("mid", fm)] {
             assert_eq!(f.pixel_format, PixelFormat::Rgba, "{name} is RGBA");
@@ -408,6 +420,13 @@ fn corpus_scenario(
     );
     let export_opens = decoder_opens();
     let export_sha = export.as_ref().map(|i| i.file_sha256.clone());
+    if baseline.is_vfr_jitter_tolerant {
+        assert!(
+            export.is_some(),
+            "VFR source must export (RLW-8-F3 fixed — the VFR class upgrades from \
+             render-blocked to certified; pre-fix typed-failure evidence preserved)"
+        );
+    }
     if let Some(info) = &export {
         assert_eq!(
             info.tracks[0].nb_frames,

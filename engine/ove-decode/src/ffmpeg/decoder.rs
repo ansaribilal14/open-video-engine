@@ -95,6 +95,7 @@ fn pe2de(e: ove_media::ProbeError) -> DecodeError {
         ove_media::ProbeError::Corrupt(d) => DecodeError::Corrupt(d),
         ove_media::ProbeError::Unsupported(d) => DecodeError::Unsupported(d),
         ove_media::ProbeError::Io(d) => DecodeError::Io(d),
+        ove_media::ProbeError::BeyondDeclaredLimits(d) => DecodeError::BeyondDeclaredLimits(d),
     }
 }
 
@@ -151,6 +152,16 @@ impl Decoder for FfmpegSwDecoder {
                 )));
             }
         };
+
+        // ADR-024 decode-input budget (defense in depth — the probe/import
+        // boundary already rejects; this re-checks before ANY geometry-scaled
+        // allocation: pool bytes, av_image buffers, codec internals).
+        if let Err(e) = crate::check_video_budget(unsafe { (*par).width as u32 }, unsafe {
+            (*par).height as u32
+        }) {
+            close_input(&mut ctx);
+            return Err(e);
+        }
 
         let codec = unsafe { sys::avcodec_find_decoder((*par).codec_id) };
         if codec.is_null() {
@@ -579,16 +590,31 @@ impl FfmpegSwDecoder {
 
     /// Convert the already-received AVFrame (not yet unreffed) into an owned
     /// FrameEnvelope with pooled, compact-layout CPU bytes.
+    ///
+    /// REALWORLD-8-F3 (fixed in the F1/F3 fix wave): the pre-fix rule typed
+    /// EVERY zero-duration frame `Corrupt("frame without duration")`. The
+    /// hostile corpus found real benign media where the container declares
+    /// NO per-frame duration at all (vfr_constructed: 220/220 packets
+    /// duration N/A in ffprobe; every decoded frame carries duration 0 —
+    /// decode itself is clean, pts are authoritative). Per FRAME_CONTRACT
+    /// §3 the duration is still EXACT and never inferred from a rate: a
+    /// container-declared absence is delivered as duration 0/1 (nobody
+    /// consumes source video frame duration — the render output carries its
+    /// own cadence duration); a NEGATIVE duration stays typed corrupt.
     fn build_frame(&mut self, pts: Rational) -> Result<FrameEnvelope, DecodeError> {
         unsafe {
-            // FRAME_CONTRACT §3: duration EXACT, never inferred from a rate.
-            // A frame without a duration field is corrupt input, honestly typed.
             let dur_ticks = (*self.frame).duration;
             let duration = if dur_ticks > 0 {
                 ticks_to_rational(dur_ticks, self.time_base)
                     .ok_or_else(|| DecodeError::Corrupt("duration out of rational range".into()))?
+            } else if dur_ticks == 0 {
+                // container declares no duration (real VFR/concat media) —
+                // exact absence, honest value; NOT corruption (RLW-8-F3 fix)
+                Rational::zero(1)
             } else {
-                return Err(DecodeError::Corrupt("frame without duration".into()));
+                return Err(DecodeError::Corrupt(format!(
+                    "frame with negative duration (raw dur_ticks={dur_ticks})"
+                )));
             };
 
             let keyframe = (*self.frame).flags & sys::AV_FRAME_FLAG_KEY != 0;

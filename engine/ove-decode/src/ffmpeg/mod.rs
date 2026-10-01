@@ -296,6 +296,12 @@ pub(crate) fn stream_facts(
             let fmt = map_pixel_format((*par).format).ok_or_else(|| {
                 ProbeError::Unsupported(format!("pixel format id {}", (*par).format))
             })?;
+            // ADR-024 decode-input budget at the IMPORT boundary: a hostile
+            // header declaring extreme geometry is rejected typed before the
+            // probe result can drive any geometry-scaled allocation
+            // downstream (decoder open re-checks — defense in depth).
+            crate::check_video_budget((*par).width as u32, (*par).height as u32)
+                .map_err(|e| ProbeError::BeyondDeclaredLimits(e.to_string()))?;
             let color = map_color(
                 (*par).color_primaries,
                 (*par).color_trc,
