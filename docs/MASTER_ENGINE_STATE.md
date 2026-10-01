@@ -4,21 +4,82 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + RLW-7 COMPLETE + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1..7 = real-world certification trail)
-DATE: 2026-09-30
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20 (1d889a0); W21 = PR #21 (bee72c5, main CI 5/5 green, tagged v0.1.0 audited-state POINTER); RLW-7 = RW-NOTE-1 closure (PR #22 merged 7bcd7c5, gate commit c41f520, main CI 5/5 green)
+WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + RLW-7 COMPLETE + RLW-8 COMPLETE (hostile/difficult real-media corpus leg) + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1..8 = real-world certification trail)
+DATE: 2026-10-01
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20 (1d889a0); W21 = PR #21 (bee72c5, main CI 5/5 green, tagged v0.1.0 audited-state POINTER); RLW-7 = RW-NOTE-1 closure (PR #22 merged 7bcd7c5, gate commit c41f520, main CI 5/5 green); RLW-8 = hostile/difficult corpus leg (PR #23, gate commit recorded in §RLW-8 deltas, main CI 5/5 green)
 
 POST-W21 POSTURE (binding, per the W21 audit §3 decision 3): the wave plan
 (0–21) is COMPLETE. The repository continues under the CERTIFICATION LOOP
-only — any future engineering wave re-runs the real-media gate (RLW-8+)
+only — any future engineering wave re-runs the real-media gate (RLW-9+)
 and updates this file. The named residuals are the roadmap, not forgotten:
 platform runtime legs (D7 PARTIAL), real-GPU (D8 EXPERIMENTAL), release
-pipeline tooling (D10 PARTIAL), hostile REALWORLD/ corpus, log-flood CPU
-budget, CI bundled-FFmpeg SIGILL (recurrence watch — root-caused and fixed
-at W0.5, ADR-012). RW-NOTE-1 (clip_assets binding) was CLOSED by RLW-7 with
-byte-identical certified output. Next concrete engineering wave when one is
-commissioned: the hostile-corpus leg (REALWORLD_VALIDATION §10) — committed
-reopen condition; requires user approval before it starts.
+pipeline tooling (D10 PARTIAL), decoder pixel-bomb caps (RLW-9,
+user-separated from RLW-8), log-flood CPU budget, CI bundled-FFmpeg SIGILL
+(recurrence watch — root-caused and fixed at W0.5, ADR-012). RW-NOTE-1
+(clip_assets binding) was CLOSED by RLW-7 with byte-identical certified
+output. RLW-8 executed the hostile REALWORLD_VALIDATION §10 corpus leg and
+classified its findings (RLW-8-F1/F3 new typed defects; F4/F5 capability
+limits; F6 observation) — no engine code was changed by RLW-8. Next concrete engineering wave when one is commissioned:
+RLW-9 (decoder pixel-bomb caps, ADR-022) OR the RLW-8-F1/F3 fetch/probe
+correctness fix wave — user decides the order; both require user approval
+before they start.
+
+## RLW-8 deltas (2026-10-01) — hostile/difficult real-media corpus leg (REALWORLD_VALIDATION §10 executed)
+
+1. **The corpus leg ran and the certification invariants held**: the fifth
+   full environment rebuild (rustc 1.98.1; libav 7.1.5 dev headers
+   re-provisioned from Debian 13 user-prefix) reproduced the certified
+   bytes exactly — permanent proof export `baf23d2a…` IDENTICAL (22.23 s,
+   WAV 294,294, decoder opens 1), W17 `ff5e67f8…` IDENTICAL (2.06 s), W18
+   `ff5e67f8…` IDENTICAL (2.37 s), verify_output 15/15 booleans, launch-
+   site pixel identity 0.0. Source re-acquired through the hardened
+   acquisition (tier-1 gate REJECTED the known `d7e3019a…` re-mux variant
+   and escalated; farm run 36833816289 passed the identity gate). Workspace
+   **200/200** (+5 corpus scenarios), fmt/clippy GREEN.
+2. **Seven corpus items across the four mandated classes, evidence-first**:
+   portrait_true (NASA AVATAR vertical, PD, 406×720), rotation_metadata
+   (primary + Display Matrix 90°, derived), vfr_constructed (three
+   real-footage segments 15/30/10 fps — genuinely uneven timing, silent),
+   long_gop (x264 g=600/sc_threshold=0 — 5 KF, max GOP 25.025 s), audio_48k
+   / audio_mono / audio_51. Every item: acquisition → identity gate →
+   independent ffprobe baseline (`corpus_baseline.py`, new) → OVE scenario
+   (`corpus_realworld.rs`, new, env-gated) → independent verification
+   (`corpus_verify.py`, new) → visual frames. Media NEVER in git; full
+   provenance + identities recorded in §10. The planned GENUINE
+   phone-capture VFR item was upstream-blocked (Wikimedia 429 on
+   datacenter IPs — attempt evidence retained); the fallback item derives
+   from the certified PD primary and is labeled derived, not captured.
+3. **Two NEW typed defects found and left UNFIXED by design** (the wave's
+   critical rule: classify, never normalize): **RLW-8-F1** — the probe's
+   `VfrReport` is computed from PACKET-order pts, so B-frame reordering
+   false-positives `is_vfr=true` on ANY B-frame CFR file (evidence:
+   `1001/6000`, `−1001/12000`, … vs ffprobe frame-order uniform
+   `1001/24000`); informational surface, render/export bytes unaffected.
+   **RLW-8-F3** — `SourceFrameMissing` (typed) at source targets where
+   frames VERIFIABLY exist (ffprobe pts 1.000000 s / 2.600000 s; first KF
+   0.0) on B-frame VFR media — the VFR class is render-blocked until the
+   fetch cursor learns reordering. Both: deterministic, reproducible,
+   no corruption/crash/wrong output; fixes scoped for a follow-up wave.
+4. **Capability limits classified, not defects**: WAV v1 caps at 2 ch
+   (typed `InvalidConfig`; the A/V AAC route carries 6 ch correctly —
+   verified); display-matrix rotation neither applied nor exposed (U-3
+   CONFIRMED; pixels correct, visual proof captured); silent media → typed
+   `NoAudioStream`; mono geometry preserved end-to-end (probe → edit →
+   AAC → WAV all 1 ch); 5.1 geometry preserved through probe/edits/AAC
+   (6 ch out verified).
+5. **Positive typed-contract evidence**: a harness units bug (ticks passed
+   as seconds — a 76,797 s clip) produced a TYPED `Internal("audio source
+   exhausted: …")`, not garbage or a crash — the engine refuses absurd
+   input honestly (RLW-8-F2, harness-side, fixed in-harness).
+6. **Observations recorded**: decoder opens vary 1–3 with keyframe-
+   relative cut-target landing (D-5 floor re-seeks; same media t0=30 → 1,
+   t0=10 → 3) — the ADR-023 pin holds on the primary scenario; per-open-
+   reason instrumentation suggested for a future wave. The decoder
+   pixel-bomb residual is UNCHANGED (weaponized media deliberately NOT
+   exercised — RLW-9 scope).
+7. **Honest scope**: hardening/evidence wave — ZERO engine code changed
+   (tests + evidence scripts + docs only). NOT done (each needs user
+   approval): RLW-9 pixel-bomb caps, RLW-8-F1/F3 fixes, D7/D8/D10 legs.
 
 ## RLW-7 deltas (2026-09-30) — RW-NOTE-1 closure (Split clip_assets binding)
 
@@ -1073,16 +1134,23 @@ All W0–W6 claims re-verified from scratch before Wave 7 work:
 
 WAVE 21 is COMPLETE (audit + ADR-024 + RLW-6 certification; this file and
 REALWORLD_VALIDATION §5 record it). The wave plan 0–21 is COMPLETE — there
-is no pre-committed W22. RLW-7 is COMPLETE (RW-NOTE-1 closed; this file,
-REALWORLD_VALIDATION §5 RLW-7 rows, and the ove-project binding
-conformance record it). Per the POST-W21 POSTURE (top of this file), the
-repository continues under the certification loop only; the named residual
-legs are the roadmap. The next CONCRETE action, when the user commissions
-it: run the hostile REALWORLD/ corpus leg (REALWORLD_VALIDATION §10) via
-its own wave (RLW-8) with the full certification gate, PR, and this file
-updated — WITH the ADR-022 decoder pixel-bomb cap conversation landing in
-the same wave or immediately after it (the corpus leg is the planned test
-vehicle for those caps). RLW-8 MUST NOT start without user approval.
-Standing gates for ANY future wave are unchanged: fmt/clippy/tests green,
-real-media certification re-run byte-identical, independent verification,
-wave + commit + hash recorded.
+is no pre-committed W22. RLW-7 is COMPLETE (RW-NOTE-1 closed). RLW-8 is
+COMPLETE (the hostile/difficult REALWORLD/ corpus leg executed under the
+§10 protocol; findings classified — two new typed defects RLW-8-F1/F3
+recorded UNFIXED, capability limits F4/F5 pinned, F6 observation recorded;
+REALWORLD_VALIDATION §5/§10 + the RLW-8 CORPUS CERTIFICATION REPORT carry
+the evidence). Per the user's RLW-8 commission, the pixel-bomb-cap
+conversation was deliberately SEPARATED from the corpus leg: RLW-9 answers
+"can intentionally extreme decoder inputs be rejected safely instead of
+killing the process?", while RLW-8 answered "what does OVE do with
+genuinely varied, difficult real media?". The next CONCRETE action, when
+the user commissions it, is ONE of:
+(a) RLW-9 — decoder pixel-bomb caps (ADR-022 residual; declared constants,
+    typed errors; the RLW-8 corpus did NOT close that residual and claims
+    nothing about it), or
+(b) the RLW-8-F1/F3 correctness fix wave — packet-order VfrReport and the
+    B-frame-VFR fetch cursor (both typed, reproducible, evidence retained).
+Either order is defensible; the user decides. BOTH require user approval
+before they start. Standing gates for ANY future wave are unchanged:
+fmt/clippy/tests green, real-media certification re-run byte-identical,
+independent verification, wave + commit + hash recorded.
