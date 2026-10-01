@@ -270,12 +270,12 @@ per-item baselines) and `corpus_verify.py` (independent output verification
 | W18 security gate re-run | PASS — 2.37 s, export sha256 `ff5e67f8…` IDENTICAL |
 | C1 portrait_true (NASA AVATAR vertical, 406×720 true-portrait, PD) | PASS — probe==ffprobe (dims/KF/CFR), edits+renders at 406×720 exact, export 96 frames @ 30/1 clean, WAV 153,600 exact, reopen 3/3 bindings + byte-identical re-export |
 | C2 rotation_metadata (primary + Display Matrix rotation=90, derived) | PASS (with finding RLW-8-F5) — decodes/edits/exports correctly in STORAGE orientation (1280×720, pixels verified against the pad footage); the display matrix is neither applied nor exposed (v1 probe schema has no rotation field — U-3 CONFIRMED as a capability limit, typed surface, visual proof captured) |
-| C3 vfr_constructed (3 real-footage segments 15/30/10 fps concat; silent) | TYPED-FAIL (finding RLW-8-F3) — probe detects genuine VFR (D-12 ✓, 3 nominal deltas vs ffprobe), silent-media WAV = typed `NoAudioStream` ✓; renders/exports at source targets where frames VERIFIABLY exist (ffprobe pts 1.000000 s / 2.600000 s) fail typed `SourceFrameMissing` — fetch-cursor defect on B-frame VFR media, reproducible, no corruption/crash |
+| C3 vfr_constructed (3 real-footage segments 15/30/10 fps concat; silent) | ~~TYPED-FAIL~~ → **CERTIFIED (RLW-8-F3 FIXED, 2026-10-02 fix wave — see §11)** — pre-fix: renders/exports at source targets where frames VERIFIABLY exist (ffprobe pts 1.000000 s / 2.600000 s) failed typed `SourceFrameMissing` (root cause found by the fix wave: the decoder typed container-declared ZERO durations `Corrupt("frame without duration")` — the container declares NO per-frame durations, 220/220 packets N/A; the original fetch-cursor hypothesis was superseded by the empirical mechanism). Post-fix: renders + exports 96/96 frames exact, reopen re-export byte-identical (`a5ed13ab…`), silent WAV still typed `NoAudioStream` (contract). Pre-fix typed-failure evidence preserved below and in the 10-01/10-02 records |
 | C4 long_gop (primary re-encode x264 −g 600 −sc_threshold 0 −bf 3; 5 KF, max GOP 25.025 s) | PASS — mid-GOP trims/renders decode forward through 25 s GOPs, export 80 frames exact, WAV 147,147 exact, reopen identical; decoder opens 3 (keyframe-relative re-seek, see RLW-8-F6) |
 | C5 audio_48k (primary video copy + AAC 48 kHz stereo) | PASS — WAV 160,160 exact; A/V out AAC 48 kHz stereo verified |
 | C6 audio_mono (48 kHz mono) | PASS — mono geometry preserved end-to-end (probe 1 ch → A/V out 1 ch → WAV 1 ch, 160,160 exact) |
 | C7 audio_51 (48 kHz 5.1, 6 ch) | PASS (with typed capability limit RLW-8-F4) — 6-ch geometry survives probe/edits/AAC re-encode (independent ffprobe: 6 ch 48 kHz out); WAV export typed-rejects `InvalidConfig("WAV v1 supports 1..=2 channels, got 6")` — honest v1 surface, no corruption |
-| probe VFR report on B-frame CFR media | FALSE-POSITIVE (finding RLW-8-F1) — VfrReport is computed from PACKET-order pts; B-frame reordering makes any B-frame CFR file report `is_vfr=true` with reordering-shaped deltas (`1001/6000`, `−1001/12000`, …) vs ffprobe frame-order uniform `1001/24000`; informational surface (scheduling never consumes it), render/export bytes unaffected |
+| probe VFR report on B-frame CFR media | ~~FALSE-POSITIVE~~ → **FIXED (RLW-8-F1, 2026-10-02 fix wave — see §11)** — pre-fix: VfrReport computed from PACKET-order pts; B-frame reordering made any B-frame CFR file report `is_vfr=true` with reordering-shaped deltas (`1001/6000`, `−1001/12000`, …) vs ffprobe frame-order uniform `1001/24000`. Post-fix: presentation-order analysis (pts sorted before the delta pass); probe verdict == ffprobe verdict on all 7 corpus items in BOTH directions |
 | independent output verification (corpus_verify.py) | PASS — 6 A/V exports: decode CLEAN under `-xerror`, frame counts EXACT (96/80/80/80/80/80), cadence + dims exact, audio geometry preserved (2/2/2/1/6 ch); vfr_constructed: 2/2 source-frame evidence booleans |
 | visual sanity (36 output frames + 2 VFR source frames) | PASS — true-portrait title card at 406×720, pad footage in storage orientation (rotation finding proof), mid-GOP launch footage clean, no corruption/frozen/black frames |
 | workspace / fmt / clippy | PASS — 200/200 (+5 corpus scenarios), fmt GREEN, clippy `-D warnings` GREEN |
@@ -285,9 +285,9 @@ per-item baselines) and `corpus_verify.py` (independent output verification
 
 | ID | Class | Type | Disposition |
 |---|---|---|---|
-| RLW-8-F1 | correctness (probe surface) | typed, deterministic | NEW DEFECT — VfrReport from packet-order pts false-positives on B-frame CFR media; fix = frame-order analysis (follow-up wave; NOT fixed in RLW-8) |
+| RLW-8-F1 | correctness (probe surface) | typed, deterministic | **FIXED 2026-10-02 (fix wave, §11)** — was: NEW DEFECT, VfrReport from packet-order pts false-positives on B-frame CFR media. Fix = presentation-order analysis in `VfrReport::from_pts` (sort pts, then delta) + pure unit pins + corpus verdict alignment (both directions) |
 | RLW-8-F2 | harness bug (not engine) | — | units bug in the first harness draft; engine behaved typed-correct; fixed in-harness |
-| RLW-8-F3 | correctness (render fetch) | typed, deterministic | NEW DEFECT — `SourceFrameMissing` at verifiably-existing frames on B-frame VFR media; VFR class currently render-blocked; fix = reorder-aware floor logic (follow-up wave; NOT fixed in RLW-8) |
+| RLW-8-F3 | correctness (render fetch) | typed, deterministic | **FIXED 2026-10-02 (fix wave, §11)** — was: NEW DEFECT, `SourceFrameMissing` at verifiably-existing frames on B-frame VFR media. Root cause (empirical, superseding the original fetch-cursor hypothesis): the decoder typed container-declared ZERO durations `Corrupt("frame without duration")`. Fix = zero-duration delivered as `0/1` (exact absence; negative stays corrupt) + committed zero-duration fixture + VFR item upgraded to full certification |
 | RLW-8-F4 | capability limit | typed | WAV v1 caps at 2 ch (A/V route carries 6 ch correctly) — recorded, not a defect |
 | RLW-8-F5 | capability limit (U-3 confirmed) | typed | display-matrix rotation neither applied nor exposed; pixels correct; multi-source/render waves own the semantic decision |
 | RLW-8-F6 | observation | — | decoder opens 1–3 across corpus cuts: keyframe-relative D-5 floor re-seeks (same media: t0=30 → 1 open, t0=10 → 3); ADR-023 pin holds on the primary scenario; per-open-reason instrumentation suggested for a future wave |
@@ -508,3 +508,87 @@ identity gates · never committed to git · per-item scenario rows and
 evidence records · defects are CLASSIFIED, never normalized · no addition
 may weaken or replace the primary NASA scenario · weaponized media
 (pixel-bomb) stays OUT of this corpus (ADR-022 residual — RLW-9 scope).
+
+## 11. RLW-8-F1/F3 fix wave + RLW-9 decoder input budgets (EXECUTED 2026-10-02)
+
+Commissioned together as the project-completion wave ("proceed to
+completion of the project"): fix the two typed defects the hostile corpus
+found, then close the ADR-022 decoder pixel-bomb residual (RLW-9). No
+feature expansion beyond these; the certification loop ran in full.
+
+### 11.1 RLW-8-F1 — FIXED (presentation-order VFR analysis)
+
+- **Root cause (empirical, this wave):** `VfrReport::from_pts` consumed
+  pts in PACKET (decode) order; B-frame reordering makes them
+  non-monotonic, so every B-frame CFR item reported `is_vfr=true` with
+  reordering-shaped deltas (5/5 B-frame corpus items — recorded 10-01).
+- **Fix:** sort pts into presentation order inside `from_pts` (pure
+  function, ove-media) before the delta pass. VFR is a property of
+  presentation timing; packet-order input is normalized, never trusted.
+- **Pins:** 3 pure unit tests (B-frame CFR packet order → not VFR;
+  genuine VFR detected regardless of input order; duplicate-pts edge);
+  corpus harness now asserts `probe verdict == ffprobe verdict` on ALL
+  items in BOTH directions.
+
+### 11.2 RLW-8-F3 — FIXED (zero-duration frames delivered)
+
+- **Root cause (empirical, superseding the original fetch-cursor
+  hypothesis):** a first-frame diagnostic (decoder seek(0, Exact) trace)
+  exposed `Corrupt("frame without duration")` (raw dur_ticks=0) — the
+  `vfr_constructed` container declares NO per-frame duration at all
+  (ffprobe: 220/220 packets duration N/A; stts positive; decode `-xerror`
+  CLEAN). The pre-fix rule "no duration = corrupt" was written against
+  the synthetic corpus; real VFR/concat media legitimately violates it,
+  and the fetch loop then died on the FIRST frame → `SourceFrameMissing`
+  at every target.
+- **Fix (ove-decode `build_frame`):** duration 0 = container-declared
+  absence, delivered as `0/1` (exact, never inferred from a rate);
+  negative durations stay typed corrupt. No downstream consumer of source
+  video frame duration exists (render output carries its own cadence
+  duration), so zero certified bytes move.
+- **Pins:** committed synthetic fixture `vfr_zerodur.mp4` (8.7 KB,
+  testsrc2 B-frame VFR, 23/23 packets duration N/A, `-xerror`-clean) —
+  whole stream must decode with strictly-increasing pts and ≥20
+  zero-duration frames delivered. Reproducible from public tooling alone
+  (B-frames + dts gaps + µs timebase via concat; a plain stts zero-delta
+  patch does NOT reproduce — the demuxer renormalizes it).
+
+### 11.3 RLW-9 — decoder input budgets (ADR-024; ADR-022 residual CLOSED)
+
+- Declared constants `ove_decode::DECODE_MAX_DIM = 16384`,
+  `DECODE_MAX_PIXELS = 2^25` (8K UHD 7680×4320 = 33.2 MP is INSIDE the
+  cap); typed `BeyondDeclaredLimits` variant on `DecodeError` and
+  `ProbeError`; enforced at the probe/import boundary AND the decoder
+  open boundary (defense in depth) before any geometry-scaled allocation.
+- Committed hostile-header conformance (`limits_test.rs`, CI-runnable, no
+  corpus media): runtime-header-patched v210/MOV fixtures (codecpar dims
+  come straight from the sample entry) — 16400×64 → typed dimension-cap
+  rejection; 4000×9000 (36 MP) → typed pixel-cap rejection at BOTH
+  boundaries; negative control opens clean. Full decision record:
+  `research/adr/ADR-024-decoder-input-budgets.md`.
+- Ride-along tooling fixes (audit observations): A-1
+  (`corpus_baseline.py` stale summary key) and the `corpus_verify.py`
+  silent-export audio probe (the VFR export now EXISTS and is verified —
+  the script's assumed-absent path crashed on an empty stream list).
+
+### 11.4 Certification (the loop, run in full)
+
+| Control | Result |
+|---|---|
+| Primary export (permanent proof) | `baf23d2a…` **BYTE-IDENTICAL** (23.22 s; reopen re-export identical) |
+| W17 plugin gate / W18 security gate | `ff5e67f8…` **BYTE-IDENTICAL** (2.10 s / 2.34 s) |
+| Workspace tests | **210/210** (+7 limits/zero-duration conformance, +3 VFR unit pins) |
+| Corpus scenarios | **5/5** — VFR item upgraded to full certification (render t0/mid + export 96 f + reopen re-export `a5ed13ab…` byte-identical) |
+| Previously certified corpus exports | **ALL 6 BYTE-IDENTICAL** (portrait `6274ab16…`, rotation `a42e8769…`, long_gop `eeb12cd8…`, 48k `172971be…`, mono `d5520e87…`, 5.1 `a638651c…`) — the fixes moved zero certified bytes |
+| Independent verification | primary 15/15 booleans; corpus 57/57 booleans across 7 A/V exports (decode `-xerror` clean, frames/cadence/dims exact, VFR audio-absence recorded as expected) |
+| Visual inspection | VFR export frame at 1.000000 s = real Artemis-I launch footage (the timestamp that pre-fix typed-failed `SourceFrameMissing { at: 1/1 }`) |
+| fmt / clippy | GREEN (`-D warnings`) |
+| Gate | this wave's gate commit + PR; CI 5/5 on merge (recorded in MASTER_ENGINE_STATE) |
+
+### 11.5 Scope boundaries (unchanged)
+
+The corpus corpus still contains NO weaponized media: RLW-9's hostile
+fixtures declare extreme geometry in otherwise-valid containers — they
+never execute decoder bombs, and the residual list in ADR-024 (audio
+shape budgets, non-libav backends, streaming-format re-validation) stays
+open by design. F4/F5/F6 remain recorded capability limits/observations.

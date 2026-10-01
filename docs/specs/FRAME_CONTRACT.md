@@ -12,7 +12,10 @@
 pub struct FrameEnvelope {
     /// Identity & scheduling
     pub pts:      Rational,   // EXACT presentation timestamp, source-rate axis (ADR-007)
-    pub duration: Rational,   // EXACT; VFR-safe (never inferred from a frame rate)
+    pub duration: Rational,   // EXACT; VFR-safe (never inferred from a frame
+                              // rate). Container-DECLARED: 0 = the container
+                              // declares no duration (real VFR/concat media —
+                              // RLW-8-F3 fix); negative = typed corrupt.
     pub timeline_pts: Option<Rational>, // set by remap when on the project axis
     pub stream_id: StreamId,  // stable asset+stream identity (content-hash based)
     pub kind:     FrameKind,  // Video | Audio { sample_rate, channels } | Metadata
