@@ -245,6 +245,53 @@ and they did not: both pinned hashes re-verified IDENTICAL.
 | independent output verification | PASS — 15/15 boolean checks true, zero false: clean `-xerror` decode of all three gate outputs (160/80/80 frames @ 24000/1001), container 6.673333 s / 3.336667 s / 3.336667 s, WAV 294,294, launch-site pixel identity (begin mean_abs_diff 0.0) |
 | visual sanity (representative frames) | PASS — begin (black fade-in, pixel-identical to source), split seam 2.70 s (left/right segments at the certified boundary), clip4 5.00 s (pad close-up, "929" burn timer), overlay mid-fade 1.50 s (keyframed composite exact); no corruption/frozen/black-error frames |
 
+### Wave-RLW-8 (hostile/difficult real-media corpus, §10 executed) results (2026-10-01)
+
+Scope: the §10 corpus leg — difficult-but-benign real media, NOT
+intentionally weaponized media. Seven items across the four planned classes
+(portrait/rotation, VFR, long-GOP, audio-geometry variants), one scenario
+row each: import → probe vs INDEPENDENT ffprobe baseline → edits
+(clip/split/resize) → undo/redo contract windows → spot renders +
+determinism → exact-frame export → WAV → save/reopen (hash + 3/3 bindings)
+→ byte-identical re-export. The PRIMARY NASA certification re-ran FIRST as
+the regression control. The decoder pixel-bomb residual (ADR-022) is
+deliberately NOT exercised and remains open (RLW-9 scope, user-separated).
+New committed evidence tooling: `corpus_baseline.py` (ffprobe-authoritative
+per-item baselines) and `corpus_verify.py` (independent output verification
++ visual frames); harness `ove-engine/tests/corpus_realworld.rs`
+(env-gated, CI stays corpus-only).
+
+| Check | Result |
+|---|---|
+| source re-provision + sha256 identity gate `2d315daf…705f` | PASS — farm run 36833816289 (DASH f136+f140, local stream-copy merge); tier-1 correctly REJECTED the known re-mux variant `d7e3019a…` and escalated (hardened acquisition re-proven) |
+| independent baseline REGENERATED from scratch | PASS — §3 reproduced exactly: 2945 frames, 5,419,008 samples, 48 keyframes, decode CLEAN under `-xerror` |
+| permanent proof re-run on the SAME source (commit-bound `OVE_COMMIT=1e01804`) | PASS — 22.23 s; export sha256 `baf23d2a…` IDENTICAL to the RLW-1..7 certified output (FIFTH full environment rebuild — rustc 1.98.1, user-prefix libav 7.1.5 dev — and the bytes did not move); reopen re-export IDENTICAL; WAV 294,294 exact; decoder opens = 1 |
+| W17 plugin gate re-run | PASS — 2.06 s, export sha256 `ff5e67f8…` IDENTICAL |
+| W18 security gate re-run | PASS — 2.37 s, export sha256 `ff5e67f8…` IDENTICAL |
+| C1 portrait_true (NASA AVATAR vertical, 406×720 true-portrait, PD) | PASS — probe==ffprobe (dims/KF/CFR), edits+renders at 406×720 exact, export 96 frames @ 30/1 clean, WAV 153,600 exact, reopen 3/3 bindings + byte-identical re-export |
+| C2 rotation_metadata (primary + Display Matrix rotation=90, derived) | PASS (with finding RLW-8-F5) — decodes/edits/exports correctly in STORAGE orientation (1280×720, pixels verified against the pad footage); the display matrix is neither applied nor exposed (v1 probe schema has no rotation field — U-3 CONFIRMED as a capability limit, typed surface, visual proof captured) |
+| C3 vfr_constructed (3 real-footage segments 15/30/10 fps concat; silent) | TYPED-FAIL (finding RLW-8-F3) — probe detects genuine VFR (D-12 ✓, 3 nominal deltas vs ffprobe), silent-media WAV = typed `NoAudioStream` ✓; renders/exports at source targets where frames VERIFIABLY exist (ffprobe pts 1.000000 s / 2.600000 s) fail typed `SourceFrameMissing` — fetch-cursor defect on B-frame VFR media, reproducible, no corruption/crash |
+| C4 long_gop (primary re-encode x264 −g 600 −sc_threshold 0 −bf 3; 5 KF, max GOP 25.025 s) | PASS — mid-GOP trims/renders decode forward through 25 s GOPs, export 80 frames exact, WAV 147,147 exact, reopen identical; decoder opens 3 (keyframe-relative re-seek, see RLW-8-F6) |
+| C5 audio_48k (primary video copy + AAC 48 kHz stereo) | PASS — WAV 160,160 exact; A/V out AAC 48 kHz stereo verified |
+| C6 audio_mono (48 kHz mono) | PASS — mono geometry preserved end-to-end (probe 1 ch → A/V out 1 ch → WAV 1 ch, 160,160 exact) |
+| C7 audio_51 (48 kHz 5.1, 6 ch) | PASS (with typed capability limit RLW-8-F4) — 6-ch geometry survives probe/edits/AAC re-encode (independent ffprobe: 6 ch 48 kHz out); WAV export typed-rejects `InvalidConfig("WAV v1 supports 1..=2 channels, got 6")` — honest v1 surface, no corruption |
+| probe VFR report on B-frame CFR media | FALSE-POSITIVE (finding RLW-8-F1) — VfrReport is computed from PACKET-order pts; B-frame reordering makes any B-frame CFR file report `is_vfr=true` with reordering-shaped deltas (`1001/6000`, `−1001/12000`, …) vs ffprobe frame-order uniform `1001/24000`; informational surface (scheduling never consumes it), render/export bytes unaffected |
+| independent output verification (corpus_verify.py) | PASS — 6 A/V exports: decode CLEAN under `-xerror`, frame counts EXACT (96/80/80/80/80/80), cadence + dims exact, audio geometry preserved (2/2/2/1/6 ch); vfr_constructed: 2/2 source-frame evidence booleans |
+| visual sanity (36 output frames + 2 VFR source frames) | PASS — true-portrait title card at 406×720, pad footage in storage orientation (rotation finding proof), mid-GOP launch footage clean, no corruption/frozen/black frames |
+| workspace / fmt / clippy | PASS — 200/200 (+5 corpus scenarios), fmt GREEN, clippy `-D warnings` GREEN |
+| harness-found engine behavior (positive) | a first harness draft passed AXIS ticks as seconds (clip dur 76,797 s); the engine returned a TYPED `Internal("audio source exhausted: …")` instead of garbage or a crash — typed-contract behavior on absurd input, recorded (RLW-8-F2, harness-side, fixed in-harness) |
+
+**RLW-8 findings registry** (full detail in the wave report):
+
+| ID | Class | Type | Disposition |
+|---|---|---|---|
+| RLW-8-F1 | correctness (probe surface) | typed, deterministic | NEW DEFECT — VfrReport from packet-order pts false-positives on B-frame CFR media; fix = frame-order analysis (follow-up wave; NOT fixed in RLW-8) |
+| RLW-8-F2 | harness bug (not engine) | — | units bug in the first harness draft; engine behaved typed-correct; fixed in-harness |
+| RLW-8-F3 | correctness (render fetch) | typed, deterministic | NEW DEFECT — `SourceFrameMissing` at verifiably-existing frames on B-frame VFR media; VFR class currently render-blocked; fix = reorder-aware floor logic (follow-up wave; NOT fixed in RLW-8) |
+| RLW-8-F4 | capability limit | typed | WAV v1 caps at 2 ch (A/V route carries 6 ch correctly) — recorded, not a defect |
+| RLW-8-F5 | capability limit (U-3 confirmed) | typed | display-matrix rotation neither applied nor exposed; pixels correct; multi-source/render waves own the semantic decision |
+| RLW-8-F6 | observation | — | decoder opens 1–3 across corpus cuts: keyframe-relative D-5 floor re-seeks (same media: t0=30 → 1 open, t0=10 → 3); ADR-023 pin holds on the primary scenario; per-open-reason instrumentation suggested for a future wave |
+
 ## 6. Real defects found by real media (the point of this workflow)
 
 | ID | Defect | Fix | Pin |
@@ -375,24 +422,89 @@ local stream copy. The YouTube-side JSON license metadata could not be
 fetched from this environment; the public-domain status rests on NASA's
 published media guidelines (recorded above).
 
-## 10. Harder real-media corpus (PLANNED — primary stays primary)
+## 10. Harder real-media corpus (EXECUTED by RLW-8, 2026-10-01 — primary stays primary)
 
 The NASA clip is the PRIMARY permanent reference; it is never replaced or
-demoted. The next robustness step (its own later wave, NOT a substitution)
-is a small corpus of deliberately difficult real media:
+demoted. RLW-8 executed this corpus as a hardening/evidence wave: every
+item passed acquisition → identity gate → independent baseline → OVE
+processing → independent verification → visual inspection → recorded
+result (§5 RLW-8 rows + the wave report). Results were recorded as found —
+two new typed defects (RLW-8-F1/F3) and three capability limits were
+classified rather than normalized.
 
 ```
-REALWORLD/
-├── primary_nasa.mp4      # the permanent reference (§2) — proves ordinary operation
-├── portrait_phone.mp4    # rotation / display-matrix metadata stress        (planned)
-├── vfr_phone.mp4         # variable-frame-rate phone capture                (planned)
-├── long_gop.mp4          # long-GOP source: seek + forward-decode stress    (planned)
-└── audio_variant.mp4     # different audio geometry (48 kHz mono / 5.1)     (planned)
+REALWORLD/  (media NEVER in git; identities below are the gates)
+├── primary_nasa.mp4      # the permanent reference (§2) — certified RLW-1..8
+├── portrait_true.mp4     # true-portrait storage: NASA "Artemis II Science -
+│                         #   AVATAR Vertical Video" (~medium rendition), public
+│                         #   domain (images-assets.nasa.gov), h264 406x720 CFR
+│                         #   30/1, AAC 48k stereo, 2273 f, 75.77 s
+│                         #   sha256 0f2c250f76c3746ab1df8a4b9837415c471c7a0eec
+│                         #   7706758bda42fc5d4620e1
+├── rotation_metadata.mp4 # DERIVED (documented transform): primary + Display
+│                         #   Matrix rotation=90 via
+│                         #   `ffmpeg -display_rotation 90 -i primary -c copy`
+│                         #   (the phone-portrait pattern; pixels untouched)
+│                         #   sha256 06a07df4197638b0855ff4ce6c31448a42d0b66c1a
+│                         #   dc07770e47303d3c10d2b7
+├── vfr_constructed.mp4   # DERIVED: three real-footage segments (src 0-4 @15fps,
+│                         #   8-12 @30fps, 20-24 @10fps) concat-filtered and
+│                         #   x264-encoded — genuinely uneven frame timing
+│                         #   (avg 220000000/11933333 ≠ r 30/1, 5 nominal
+│                         #   delta clusters), silent (no audio stream)
+│                         #   sha256 a1c6549a22ba8f1dabfcadbeba32089a973aa5dcf41
+│                         #   ae3d1007c8b9968e315c0
+│                         #   NOTE: the planned GENUINE phone-capture VFR item
+│                         #   (Commons "InFocus M330 screencast Mobizen",
+│                         #   Apache-2.0) was BLOCKED: upload.wikimedia.org
+│                         #   returns 429 to this datacenter IP (recorded
+│                         #   attempt evidence); the constructed item derives
+│                         #   from the certified PD primary and is labeled as
+│                         #   derived, not phone-captured
+├── long_gop.mp4          # DERIVED: primary re-encode
+│                         #   `x264 -preset veryfast -crf 20 -g 600
+│                         #   -sc_threshold 0 -bf 3 -b-pyramid normal`
+│                         #   + AAC audio — 5 keyframes, max GOP 25.025 s
+│                         #   sha256 b9cd7602591d1d5f31bbc50d8e1ab0ad14268cc6e
+│                         #   a74f74bbdcfddf5c23d3788
+├── audio_48k.mp4         # DERIVED: primary video copy + `-c:a aac -ar 48000`
+│                         #   sha256 4720f0d565f13d7cbebc05f65badc7a5e1a44c5196
+│                         #   01fe870072ff1130d54954
+├── audio_mono.mp4        # DERIVED: primary video copy + `-c:a aac -ar 48000
+│                         #   -ac 1`   sha256 9e75a0022dee552f64dea4d2799227c16
+│                         #   c834db1a675465b4efe4b52338bd972
+└── audio_51.mp4          # DERIVED: primary video copy + `-c:a aac -ar 48000
+                          #   -ac 6 -channel_layout 5.1`
+                          #   sha256 b9c22f065fc196771d4e2a0d9f461d6a25929c6c7f
+                          #   cbf71e91cb08f369c69723
 ```
 
-The primary proves ordinary real-world operation; the harder corpus proves
-robustness. Rules for every corpus addition — identical discipline to §2–§3:
-license-clean public-domain/CC source · full provenance record · independent
-ffprobe baseline · sha256 identity gate · never committed to git · each new
-file gets its own scenario rows and per-run evidence records. No addition may
-weaken or replace the primary NASA scenario.
+Re-run recipe (identical discipline to §9):
+
+```bash
+# per-item independent baselines (ffprobe authority)
+scripts/realworld/corpus_baseline.py <item.mp4> <item.baseline.json>
+
+# corpus scenarios (env-gated; CI stays corpus-only)
+OVE_COMMIT=<gate-commit> OVE_CORPUS_OUT=<proof-dir> \
+OVE_CORPUS_PORTRAIT=<portrait_true.mp4> \
+OVE_CORPUS_PORTRAIT_BASELINE=<portrait_true.baseline.json> \
+OVE_CORPUS_ROTATION=<rotation_metadata.mp4> \
+OVE_CORPUS_ROTATION_BASELINE=<rotation_metadata.baseline.json> \
+OVE_CORPUS_VFR=<vfr_constructed.mp4> \
+OVE_CORPUS_VFR_BASELINE=<vfr_constructed.baseline.json> \
+OVE_CORPUS_LONGGOP=<long_gop.mp4> \
+OVE_CORPUS_LONGGOP_BASELINE=<long_gop.baseline.json> \
+OVE_CORPUS_AUDIO_DIR=<dir with audio_48k/mono/51 .mp4+baseline.json> \
+cargo test -p ove-engine --release --test corpus_realworld
+
+# independent output verification + visual frames
+scripts/realworld/corpus_verify.py <proof-dir> <frames-dir>
+```
+
+Rules that governed RLW-8 (unchanged for future corpus legs): license-clean
+sources with full provenance · independent ffprobe baselines · sha256
+identity gates · never committed to git · per-item scenario rows and
+evidence records · defects are CLASSIFIED, never normalized · no addition
+may weaken or replace the primary NASA scenario · weaponized media
+(pixel-bomb) stays OUT of this corpus (ADR-022 residual — RLW-9 scope).
