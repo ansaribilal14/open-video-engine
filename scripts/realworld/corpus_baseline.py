@@ -154,4 +154,10 @@ print(json.dumps({k: facts[k] for k in ("file", "sha256", "display_rotation_deg"
                                         "keyframe_count", "max_gop_seconds",
                                         "decode_clean") if k in facts}, indent=1))
 if facts.get("vfr"):
-    print("vfr:", facts["vfr"]["is_vfr"], "deltas:", facts["vfr"]["distinct_delta_count"])
+    # A-1 fix (RLW-8 audit observation): the summary referenced a stale key
+    # `distinct_delta_count` and crashed AFTER the baseline JSON was written.
+    # Print the two real keys, guarded, so the script exits clean.
+    v = facts["vfr"]
+    print("vfr:", v.get("is_vfr"),
+          "deltas_exact:", v.get("distinct_delta_count_exact"),
+          "deltas_jitter_tolerant:", v.get("distinct_delta_count_jitter_tolerant"))

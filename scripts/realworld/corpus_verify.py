@@ -25,7 +25,10 @@ ITEMS = {
     "audio_48k": (80, "24000/1001", [0.0, 0.5, 1.05, 1.5, 2.7, 3.2]),
     "audio_mono": (80, "24000/1001", [0.0, 0.5, 1.05, 1.5, 2.7, 3.2]),
     "audio_51": (80, "24000/1001", [0.0, 0.5, 1.05, 1.5, 2.7, 3.2]),
-    "vfr_constructed": (96, "30/1", []),  # export typed-failed: verify the source instead
+    # RLW-8-F3 FIXED: the VFR item now exports (96 f @ 30/1) and is verified
+    # like the others; it is SILENT, so its audio probe legitimately returns
+    # no streams (recorded as absent, never an error).
+    "vfr_constructed": (96, "30/1", [0.0, 0.5, 1.0, 1.6, 2.3, 3.1]),
 }
 
 
@@ -54,8 +57,13 @@ for item, (n_frames, rate, spots) in ITEMS.items():
         r = run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-count_frames",
                  "-show_entries", "stream=nb_read_frames,codec_name,channels,sample_rate",
                  "-of", "json", str(av)])
-        ast = json.loads(r.stdout).get("streams", [{}])[0]
+        # silent exports (vfr_constructed) legitimately have no audio stream:
+        # record absence, never crash (F3-fixed wave)
+        streams = json.loads(r.stdout).get("streams") or []
+        ast = streams[0] if streams else {}
         rep["audio_out"] = {k: ast.get(k) for k in ("codec_name", "channels", "sample_rate")}
+        if not streams:
+            rep["audio_absent_expected"] = item == "vfr_constructed"
         for name, t in spots.items() if isinstance(spots, dict) else [(f"{t:.2f}s", t) for t in spots]:
             r = run(["ffmpeg", "-v", "error", "-y", "-ss", f"{t:.3f}", "-i", str(av),
                      "-frames:v", "1", str(FRAMES / f"out_{item}_{name}.png")])

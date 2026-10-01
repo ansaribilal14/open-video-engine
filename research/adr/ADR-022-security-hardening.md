@@ -141,7 +141,10 @@ independent ffprobe verification → deterministic record
   this wave; a hostile media file with extreme dimensions still relies on
   libav's own limits. This rides the decode-hardening conversation with the
   VFR/long-GOP corpus leg (REALWORLD §10) so the cap can be tested against
-  real difficult media, not synthetic assertions.
+  real difficult media, not synthetic assertions. **CLOSED 2026-10-02 by
+  ADR-024 (RLW-9): declared `DECODE_MAX_DIM`/`DECODE_MAX_PIXELS` enforced
+  typed at the probe/import and decoder-open boundaries, with committed
+  hostile-header conformance and byte-identical certified outputs.**
 - **Windows path semantics**: the asset-path validator treats `\` as an
   ordinary character (POSIX). A Windows-hostile-path review is deferred to
   the platform-leg wave that first targets Windows.

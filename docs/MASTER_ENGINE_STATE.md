@@ -4,25 +4,80 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + RLW-7 COMPLETE + RLW-8 COMPLETE (hostile/difficult real-media corpus leg) + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1..8 = real-world certification trail)
-DATE: 2026-10-01
-COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20 (1d889a0); W21 = PR #21 (bee72c5, main CI 5/5 green, tagged v0.1.0 audited-state POINTER); RLW-7 = RW-NOTE-1 closure (PR #22 merged 7bcd7c5, gate commit c41f520, main CI 5/5 green); RLW-8 = hostile/difficult corpus leg (PR #23 merged fa32f03, gate commits 6d82302 test+72ba4f7 docs, main CI 5/5 green)
+WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + RLW-7 COMPLETE + RLW-8 COMPLETE (hostile/difficult real-media corpus leg) + RLW-8-F1/F3 FIX WAVE + RLW-9 COMPLETE (decoder input budgets) + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1..9 = real-world certification trail)
+DATE: 2026-10-02
+COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20 (1d889a0); W21 = PR #21 (bee72c5, main CI 5/5 green, tagged v0.1.0 audited-state POINTER); RLW-7 = RW-NOTE-1 closure (PR #22 merged 7bcd7c5, gate commit c41f520, main CI 5/5 green); RLW-8 = hostile/difficult corpus leg (PR #23 merged fa32f03, gate commits 6d82302 test+72ba4f7 docs, main CI 5/5 green); RLW-8-FIX+RLW-9 = F1/F3 fixes + decoder input budgets (see RLW-8-FIX deltas below for the gate/PR record)
 
 POST-W21 POSTURE (binding, per the W21 audit §3 decision 3): the wave plan
 (0–21) is COMPLETE. The repository continues under the CERTIFICATION LOOP
-only — any future engineering wave re-runs the real-media gate (RLW-9+)
-and updates this file. The named residuals are the roadmap, not forgotten:
-platform runtime legs (D7 PARTIAL), real-GPU (D8 EXPERIMENTAL), release
-pipeline tooling (D10 PARTIAL), decoder pixel-bomb caps (RLW-9,
-user-separated from RLW-8), log-flood CPU budget, CI bundled-FFmpeg SIGILL
-(recurrence watch — root-caused and fixed at W0.5, ADR-012). RW-NOTE-1
-(clip_assets binding) was CLOSED by RLW-7 with byte-identical certified
-output. RLW-8 executed the hostile REALWORLD_VALIDATION §10 corpus leg and
-classified its findings (RLW-8-F1/F3 new typed defects; F4/F5 capability
-limits; F6 observation) — no engine code was changed by RLW-8. Next concrete engineering wave when one is commissioned:
-RLW-9 (decoder pixel-bomb caps, ADR-022) OR the RLW-8-F1/F3 fetch/probe
-correctness fix wave — user decides the order; both require user approval
-before they start.
+only — any future engineering wave re-runs the real-media gate and updates
+this file. The named residuals are the roadmap, not forgotten: platform
+runtime legs (D7 PARTIAL), real-GPU (D8 EXPERIMENTAL), release pipeline
+tooling (D10 PARTIAL), log-flood CPU budget, CI bundled-FFmpeg SIGILL
+(recurrence watch — root-caused and fixed at W0.5, ADR-012). CLOSED since
+W21: RW-NOTE-1 (clip_assets binding — RLW-7, byte-identical certified
+output); the hostile benign-difficult corpus leg (RLW-8, classified
+findings); **RLW-8-F1 (probe VFR false-positive on B-frame CFR media) and
+RLW-8-F3 (zero-duration frames typed corrupt → VFR class render-blocked)
+— both FIXED by the 2026-10-02 fix wave with every certified hash
+byte-identical; RLW-9 decoder input budgets (ADR-024) close the ADR-022
+pixel-bomb residual — declared DECODE_MAX_DIM/DECODE_MAX_PIXELS, typed
+BeyondDeclaredLimits at the probe/import and decoder-open boundaries,
+committed hostile-header conformance.** The headless-core stop-condition
+item "hostile corpus runs to completion with zero untyped deaths" now
+holds for the benign-difficult class WITH the VFR class certified (7/7
+corpus items pass or carry only recorded capability limits). Remaining
+open waves (each needs user approval): D7 desktop leg (E-006b hardware),
+D8 Android device leg, D10 release pipeline, browser GPU leg, hardware
+acceleration, audio-shape budgets (ADR-024 residual), log-flood CPU
+budget, protocol-abort child reaping, Windows path semantics.
+
+## RLW-8-FIX + RLW-9 deltas (2026-10-02) — F1/F3 fixes + decoder input budgets (REALWORLD_VALIDATION §11; ADR-024)
+
+1. **RLW-8-F1 FIXED (presentation-order VFR analysis)**: `VfrReport::from_pts`
+   sorts packet-order pts into presentation order before the delta pass —
+   B-frame CFR media no longer false-positives `is_vfr=true`; the corpus
+   harness now pins `probe verdict == ffprobe verdict` on ALL items in BOTH
+   directions; 3 pure unit pins added (CI-runnable).
+2. **RLW-8-F3 FIXED (zero-duration frames delivered)**: empirical root cause
+   found by a first-frame decoder diagnostic — the pre-fix rule typed
+   container-declared ZERO durations `Corrupt("frame without duration")`
+   (`vfr_constructed`: 220/220 packets duration N/A, decode `-xerror`
+   CLEAN); the fetch loop died on frame 0 → the VFR class was
+   render-blocked. Fix: duration 0 = container-declared absence, delivered
+   as `0/1` (exact; never inferred from a rate; negative stays corrupt).
+   Committed fixture `vfr_zerodur.mp4` (8.7 KB synthetic B-frame VFR,
+   23/23 zero-duration packets) pins the contract in CI. The corpus VFR
+   item is upgraded to FULL certification: renders + exports 96/96 frames,
+   reopen re-export `a5ed13ab…` byte-identical; visual proof = real launch
+   footage at ffprobe pts 1.000000 s (the pre-fix failing target).
+3. **RLW-9 decoder input budgets (ADR-024; the ADR-022 pixel-bomb residual
+   is CLOSED)**: declared constants `DECODE_MAX_DIM = 16384`,
+   `DECODE_MAX_PIXELS = 2^25`; typed `BeyondDeclaredLimits` on
+   `DecodeError` + `ProbeError`; enforced at the probe/import boundary AND
+   decoder open (defense in depth) BEFORE any geometry-scaled allocation;
+   committed hostile-header conformance (`limits_test.rs`): runtime-patched
+   v210/MOV fixtures — 16400×64 → dimension-cap rejection, 4000×9000 →
+   pixel-cap rejection at both boundaries, unpatched negative control opens
+   clean. Honest scale carries ≥1000× headroom (8K UHD legal by
+   declaration). Audio-shape budgets + non-libav backends + streaming-format
+   re-validation stay open residuals in ADR-024.
+4. **The certification loop held on every invariant** (sixth rebuild,
+   rustc 1.99.0): primary `baf23d2a…` BYTE-IDENTICAL (23.22 s, reopen
+   identical), W17 `ff5e67f8…` IDENTICAL (2.10 s), W18 `ff5e67f8…`
+   IDENTICAL (2.34 s), verify_output 15/15, workspace **210/210**, corpus
+   **5/5** with ALL 6 previously certified corpus export hashes
+   BYTE-IDENTICAL, corpus independent verification 57/57 booleans across 7
+   A/V exports, fmt/clippy GREEN, gate PR CI 5/5 on merge.
+5. **Ride-along tooling honesty fixes** (RLW-8 audit observations A-1):
+   `corpus_baseline.py` stale summary key fixed; `corpus_verify.py`
+   silent-export audio probe fixed (the VFR export now EXISTS and is
+   verified — 57/57 booleans; previously assumed absent).
+6. **Honest scope**: fixes + security budgets ONLY — no feature expansion,
+   no normalization (the pre-fix typed-failure evidence is preserved in
+   §5/§10/§11 and the 10-01/10-02 records). NOT reopened: F4/F5/F6 remain
+   recorded capability limits/observations; weaponized EXECUTING media
+   stays out of every corpus.
 
 ## RLW-8 deltas (2026-10-01) — hostile/difficult real-media corpus leg (REALWORLD_VALIDATION §10 executed)
 

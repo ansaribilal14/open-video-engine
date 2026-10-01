@@ -56,7 +56,8 @@ pub trait Decoder: Send {
 | D-9 | SW fallback: if hw requested but unavailable → typed Unsupported, caller chooses SW; never a hidden downgrade | capability table check |
 | D-10 | Color tags: all five tags present on every video frame; unknown-as-value allowed | FRAME_CONTRACT §4 rule enforced by type |
 | D-11 | Memory honesty: SW adapter emits only Cpu/Packed; caps declare it | §3 rule |
-| D-12 | VFR safety: pts sequence need not be uniform; nothing may assume CFR | VFR sample (screen recording) committed |
+| D-12 | VFR safety: pts sequence need not be uniform; nothing may assume CFR. VFR DETECTION (probe surface) is presentation-order analysis — packet-order pts are sorted before the delta pass (RLW-8-F1 fix; B-frame CFR media must NOT false-positive) | VFR sample (screen recording) committed + pure unit pins + corpus probe-vs-ffprobe verdict alignment |
+| D-13 | Decode-input budgets: declared `DECODE_MAX_DIM`/`DECODE_MAX_PIXELS` (ADR-024) reject hostile declared geometry TYPED at the probe and decoder-open boundaries, before any geometry-scaled allocation; zero-duration frames are DELIVERED (container-declared absence, RLW-8-F3 fix), negative durations stay typed corrupt | committed hostile-header fixture (runtime-patched v210/MOV) at both boundaries + negative control + zero-duration fixture |
 
 ## 3. Capability report (declared, not discovered by crashing)
 
@@ -86,7 +87,7 @@ pub struct DecoderCaps {
 
 ## 5. What "decoder done" means
 
-1. All conformance tests D-1..D-12 green on the committed corpus (CI-runnable, software).
+1. All conformance tests D-1..D-13 green on the committed corpus (CI-runnable, software).
 2. No libav* symbols outside ove-decode.
 3. Golden decode tables committed (pts lists + hashes) so regressions are diffs, not vibes.
 4. FRAME_CONTRACT §7 checklist passes review on the adapter code.
