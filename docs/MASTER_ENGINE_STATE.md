@@ -4,7 +4,7 @@
 > Other status documents are historical/evidence records and stay untouched.
 > Update this file at the end of every major wave using the §40 report format.
 
-WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + RLW-7 COMPLETE + RLW-8 COMPLETE (hostile/difficult real-media corpus leg) + RLW-8-F1/F3 FIX WAVE + RLW-9 COMPLETE (decoder input budgets) + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1..9 = real-world certification trail)
+WAVE: 21 COMPLETE (WAVE PLAN 0–21 COMPLETE) + RLW-7 COMPLETE + RLW-8 COMPLETE (hostile/difficult real-media corpus leg) + RLW-8-F1/F3 FIX WAVE + RLW-9 COMPLETE (decoder input budgets) + FINAL PRODUCTIZATION COMPLETE (docs/release surfacing + final gate re-run; ZERO engine changes) + REALWORLD VALIDATION WAVES COMPLETE (… / 9 GPU / 10–12 platform-leg evidence / 13 conformance / 14 headless batch / 15 AI-MCP / 16 scripting / 17 plugins / 18 security / 19 perf / 20 docs-release / 21 production audit — all landed; RLW-1..9 = real-world certification trail)
 DATE: 2026-10-02
 COMMIT: W3 = PR #5; W4 = PR #6; W5 = PR #7; W6 = PR #8; W7 = PR #9; W8 = PR #10; W9 = PR #11; W10–12 = PR #12; W13–14 = PR #13; W15 = PR #14; W16 = PR #15; RLW-1 = PR #16; W17 = PR #17; W18 = PR #18 (a8bc078); W19 = PR #19 (faec389); W20 = PR #20 (1d889a0); W21 = PR #21 (bee72c5, main CI 5/5 green, tagged v0.1.0 audited-state POINTER); RLW-7 = RW-NOTE-1 closure (PR #22 merged 7bcd7c5, gate commit c41f520, main CI 5/5 green); RLW-8 = hostile/difficult corpus leg (PR #23 merged fa32f03, gate commits 6d82302 test+72ba4f7 docs, main CI 5/5 green); RLW-8-FIX+RLW-9 = F1/F3 fixes + decoder input budgets (PR #24 merged 2f2e0ab, gate commits eebfcac fix + c961c14 tests + 9faf781 docs, PR CI 5/5 + main CI 5/5 on 2f2e0ab, final certification re-run ON 2f2e0ab: all invariants byte-identical, corpus records commit-bound) — tagged **v0.2.0** (completion POINTER)
 
@@ -31,6 +31,54 @@ open waves (each needs user approval): D7 desktop leg (E-006b hardware),
 D8 Android device leg, D10 release pipeline, browser GPU leg, hardware
 acceleration, audio-shape budgets (ADR-024 residual), log-flood CPU
 budget, protocol-abort child reaping, Windows path semantics.
+
+## FINAL PRODUCTIZATION deltas (2026-10-02) — docs/release surfacing ONLY (PR #25 merged 76e95e6; no engine changes)
+
+Final takeover command executed: audit first (FINAL TAKEOVER STATE REPORT,
+13 sections, live-repo + GitHub-API verified), then the smallest plan that
+reaches the real finish line, then implementation. Results:
+
+1. **Truth-in-documentation (README)**: stale "Waves 0–19 landed (v0.10)"
+   phase replaced by the v0.2.0 reality (W0–W21 + RLW-1..9, hostile corpus
+   7/7 pass-or-recorded-limits, F1/F3 fixed, RLW-9 budgets, CI 5/5 on both
+   pointer tags); stale libav comment ("ove-decode the ONLY crate") corrected
+   to the CI-enforced closed allowlist {ove-decode, ove-encode} (ADR-015);
+   ADR range 001..024. No wording anywhere upgraded a classification.
+2. **Release surfacing**: `CHANGELOG.md` added — evidence-cited v0.1.0
+   (audited-state pointer) and v0.2.0 (completion pointer) entries, plus the
+   explicit pointer-vs-artifact release model note (crates stay 0.1.0 per the
+   recorded versioning rule; consumption model = source checkout + DEV_ENV
+   build). GitHub Release objects for the two tags carry these notes.
+3. **ADR registry addendum**: post-audit statuses (015/020/021/022/023/024)
+   and the ADR-024 numbering-collision clarification — two accepted records
+   share the number; cite the FILE name; history is never renumbered; future
+   records continue from ADR-025.
+4. **Environment re-proof (7th full sandbox wipe; DEV_ENV recipe re-verified
+   end to end)**: rustup 1.99.0 + distro libav 7.1.5 dev extraction + clang
+   resource-dir wiring rebuilt from scratch; local gates GREEN on the merged
+   tree — fmt OK, clippy `-D warnings` OK, workspace tests **210/210 across
+   59 suites, 0 failures** (release profile, distro-libav path; GPU parity +
+   platform legs stay CI-covered). The documented build reproduces.
+5. **Final real-media gate at the merged HEAD (permanent proof re-run)**:
+   identity-gated NASA source re-acquired through the ytagent farm
+   (farm run 36945621149, DASH f136+f140, local stream-copy merge) — sha256
+   `2d315daf…705f` IDENTITY GATE PASS; independent ffprobe baseline
+   regenerated from scratch per §9 (2945 frames, 48 keyframes, 5,419,008
+   decoded audio samples, decode `-xerror` clean). The permanent proof
+   PASSED: primary export `baf23d2a…` **BYTE-IDENTICAL** (21.93 s), reopen
+   re-export byte-identical, WAV 294,294 samples exact, decoder-open budget
+   ONE per export. W17 plugin-tier gate (2.07 s) + W18 security gate (2.27 s)
+   re-PASSED on the same real media; independent output verification
+   (ffprobe authority): decode clean, 160/160 frames, all 9 frame-placement
+   booleans true. Evidence: realworld_record.json + verify output retained
+   as local certification records (commit-bound by this doc).
+6. **Classification discipline held**: no artificial wave numbers; no scope
+   expansion; D7/D8/D10 stay PARTIAL/EXPERIMENTAL/PARTIAL with named reopen
+   conditions; hardware-gated residuals unchanged (see POST-W21 POSTURE).
+   The project is DECLARED FINISHED for its defined v1 scope (headless,
+   software-rendered, exact-time, real-media-certified engine + four client
+   surfaces + LGPL codec-adapter posture); the certification loop remains
+   the operating mode for any future wave.
 
 ## RLW-8-FIX + RLW-9 deltas (2026-10-02) — F1/F3 fixes + decoder input budgets (REALWORLD_VALIDATION §11; ADR-024)
 
